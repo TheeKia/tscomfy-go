@@ -1,0 +1,116 @@
+# golangci-lint v2. The gate (`make check`, docs/spec.md §9) runs it with the version pinned in
+# the Makefile. Formatting is checked by gofmt in the gate, so no formatters are enabled here.
+version: "2"
+
+linters:
+  # errcheck, govet, ineffassign, staticcheck, unused.
+  default: standard
+  enable:
+    - bodyclose # the client does HTTP; an unclosed body leaks its connection
+    - containedctx # contexts bound the call they are passed to, never live in structs (spec §7.1)
+    - depguard # the allowed dependencies and the packages' direction (spec §2.2, §2.4); rules below
+    - durationcheck # backoff, polls and pings multiply durations
+    - errname # sentinel errors are Err…, error types …Error
+    - errorlint # wrap with %w; compare with errors.Is and errors.As
+    - exhaustive # switches over Kind, FolderType, PreviewMethod and the like cover every value
+    - fatcontext # no contexts nested in loops
+    - forcetypeassert # a failed type assertion panics; check it
+    - gocheckcompilerdirectives # go:embed and go:generate directives are well formed
+    - gochecknoinits # no init functions
+    - gocritic # bugs and performance traps beyond vet
+    - godox # a phase ends with no known TODOs (docs/plan.md)
+    - gomoddirectives # no replace or retract directives in a published module
+    - gosec # file paths in the generator, HTTP in the client
+    - intrange # modern Go
+    - misspell
+    - modernize # modern Go: the analyzers gopls suggests
+    - nilerr # never return nil after checking a non-nil error
+    - nilnesserr
+    - noctx # every request takes a context
+    - nolintlint # a nolint directive names its linter and says why
+    - predeclared # no shadowing of Go's predeclared identifiers
+    - reassign # no reassigning other packages' variables
+    - recvcheck # one receiver kind per type
+    - revive # doc comments on every exported symbol, Go naming
+    - sloglint # consistent log/slog calls
+    - thelper # test helpers call t.Helper
+    - tparallel # t.Parallel used consistently
+    - unconvert
+    - unparam
+    - usestdlibvars # http.MethodPost and the like
+    - usetesting # t.Context and t.TempDir over their stand-ins
+    - wastedassign
+
+  settings:
+    depguard:
+      rules:
+        dependencies:
+          list-mode: strict
+          allow:
+            - $gostd
+            - github.com/coder/websocket
+            - github.com/TheeKia/tscomfy-go
+        comfy:
+          files:
+            - "**/comfy/*.go"
+          deny:
+            - pkg: github.com/TheeKia/tscomfy-go/workflow
+              desc: comfy knows nothing about templates (spec §2.2)
+            - pkg: github.com/TheeKia/tscomfy-go/internal/format
+              desc: comfy knows nothing about templates (spec §2.2)
+        workflow:
+          files:
+            - "**/workflow/*.go"
+          deny:
+            - pkg: github.com/coder/websocket
+              desc: workflow knows nothing about sockets (spec §2.2)
+    exhaustive:
+      default-signifies-exhaustive: true
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment # field order follows meaning, not padding
+        - shadow # `err` is shadowed idiomatically
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+        - name: receiver-naming
+        - name: error-naming
+        - name: error-strings
+        - name: error-return
+        - name: errorf
+        - name: context-as-argument
+        - name: context-keys-type
+        - name: indent-error-flow
+        - name: increment-decrement
+        - name: range
+        - name: time-naming
+        - name: unexported-return
+        - name: unreachable-code
+        - name: redefines-builtin-id
+        - name: superfluous-else
+        - name: empty-block
+        - name: unused-parameter
+    sloglint:
+      no-mixed-args: true
+      static-msg: true
+      key-naming-case: snake
+    staticcheck:
+      checks:
+        - all
+
+  exclusions:
+    generated: strict
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

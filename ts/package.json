@@ -1,0 +1,43 @@
+{
+  "name": "@tscomfy/go",
+  "version": "0.0.0",
+  "description": "Write ComfyUI workflows in TypeScript with tscomfy and run them from Go: template, param, and the export that tscomfy-go's generator runs.",
+  "keywords": [
+    "comfyui",
+    "go",
+    "stable-diffusion",
+    "typescript",
+    "workflow"
+  ],
+  "homepage": "https://github.com/TheeKia/tscomfy-go/tree/main/ts#readme",
+  "bugs": "https://github.com/TheeKia/tscomfy-go/issues",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheeKia/tscomfy-go.git",
+    "directory": "ts"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.tsbuildinfo",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": {
+      "@tscomfy/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@tscomfy/core": "^0.2.1"
+  },
+  "engines": {
+    "bun": ">=1.4"
+  }
+}

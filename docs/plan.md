@@ -1,0 +1,172 @@
+# tscomfy-go: plan
+
+How tscomfy-go gets built: the phases, what each delivers, and what each settles. The design
+itself is `docs/spec.md`; the main decisions and what they rejected are in `docs/decisions.md`.
+When a phase changes the design, the spec (and the decision entry, if any) changes in the same
+commit; this file only tracks the work.
+
+## Status
+
+| Phase | State |
+|---|---|
+| 0. Setup | In progress: repository set up, gate green locally; CI on GitHub remaining |
+| 1. Templates | Not started |
+| 2. Client core | Not started |
+| 3. Events | Not started |
+| 4. Robustness | Not started |
+| 5. Files | Not started |
+| 6. Live tests | Not started |
+| 7. Release | Not started |
+
+## Rules for every phase
+
+- A phase ends with the gate green (spec §9), run locally, and with no known TODOs.
+- Every value it settles (spec §10) is written into the spec, with its reason.
+- Research comes before code: run it, read the source, measure it, and record the evidence.
+- Only the latest releases are supported (spec §1.2): no code for older ComfyUI, Go or tscomfy
+  versions.
+
+## Phases
+
+### 0. Setup
+
+- **Done:** `docs/spec.md`; `docs/decisions.md` (D1 workflows as templates, D2 the client's Go
+  conventions, D3 Submit's failure rule, D4 the npm package in this repository). The npm name
+  `@tscomfy/go` is confirmed. A review on 2026-10-20 checked the spec against ComfyUI 0.42,
+  tscomfy and Go 1.27, corrected it and cut what had no use (History below).
+- **Repository setup, done 2026-10-20** (`make check` green locally):
+  - git (`main`), `.gitignore`. Fuzzing needs no ignore rule: its cache is in `$GOCACHE`, and
+    `testdata/fuzz/` holds regression inputs, which are committed.
+  - **Pinned, newest on 2026-10-20:** Go 1.27.2 (`go 1.27`), golangci-lint 2.15.0, govulncheck
+    1.9.0, Bun 1.4.3, TypeScript 7.0.2, oxlint 1.89.0, oxlint-tsgolint 7.0.2004, oxfmt 0.74.0;
+    the Actions `actions/checkout` 7.0.1, `actions/setup-go` 7.0.0, `oven-sh/setup-bun` 2.2.0,
+    `golangci/golangci-lint-action` 9.3.0.
+  - **Go:** `go.mod` (`go 1.27`, `ignore node_modules`); `comfy/`, `workflow/`,
+    `internal/format/`, `internal/comfytest/`, each with only its package doc comment;
+    `.golangci.yml` with each linter justified, and `depguard` enforcing the allowed dependencies
+    and the packages' direction (checked with a violating file).
+  - **TypeScript:** the workspace `package.json`, `tsconfig.json` and `tsconfig.base.json`,
+    tscomfy's `.oxlintrc.json` (without its package-specific overrides) and `.oxfmtrc.json`, and
+    `ts/` as `@tscomfy/go` 0.0.0 with its module doc comment.
+  - **The gate:** the `Makefile`, one target per step (spec §9). `bun test` runs with
+    `--pass-with-no-tests` until there are tests, instead of a placeholder test.
+  - **CI:** `.github/workflows/check.yml` runs `make check`.
+  - **Fixtures:** `internal/comfytest/recordings/` (tscomfy's nine protocol recordings) and
+    `testdata/object-info/` (five of its mock schemas; Phase 1 copies any other the export tests
+    need), each with a README of its provenance.
+  - **Left to the phase that first uses them,** so nothing unused is declared:
+    `cmd/tscomfy-go/` (a `main` package can't be empty) and the `@tscomfy/core`, `@tscomfy/cli`
+    and `@types/bun` dev dependencies in Phase 1; `github.com/coder/websocket` in `go.mod` in
+    Phase 2 (`go mod tidy` drops a requirement nothing imports).
+- **Remaining:** the GitHub repository, the first commit, and CI green on it.
+- **Exit:** `make check` is green on the empty packages, locally and in CI.
+
+### 1. Templates
+
+No ComfyUI needed.
+
+- **`@tscomfy/go`:** `template`, `param`, the export command and its checks (spec §3).
+- **The template format** types in `internal/format` (spec §4).
+- **Package `workflow`:** `Load`, `Fill`, the checks, `ParamError` (spec §5).
+- **The generator** in `cmd/tscomfy-go/`: export invocation, the format check, types, names,
+  constants, the output directory rules (spec §6), and the `go tool` setup.
+- **Dev dependencies:** `@tscomfy/core` (for `ts/`, matching its peer range), `@tscomfy/cli` (the
+  example's schema) and `@types/bun` (the tests), pinned.
+- **`examples/txt2img/workflows`:** a workspace member with the txt2img template of spec §3.1.
+  Its schema is generated, and committed, by a package script running
+  `tscomfy generate --from ../../../testdata/object-info/basic-pipeline.json --out comfy/local
+  --import-extension .ts` (the import extension because §3.1 imports `./comfy/local/index.ts`).
+  Its generated Go is committed too. The handler comes in Phase 7.
+- **Tests:** export tests on the mock schemas, golden tests, the cross-language property, fuzzing
+  of `Load` and `Fill`. The gate gains short fuzz runs and the end-to-end check (spec §9).
+- **Start from:** `docs/research/runtime-and-templates.md` §3, the prototype export and fill.
+- **Settles:** the export command's invocation.
+- **Exit:** a workflow in TypeScript becomes committed Go whose `Build()` output matches tscomfy's
+  own, byte for byte.
+
+### 2. Client core
+
+Read first: the tscomfy files listed in AGENTS.md for Phase 2.
+
+- **`github.com/coder/websocket`** v1.8.15 (or newer) added to `go.mod`.
+- **`Dial`:** URL rules, the socket, flags, the read limit, the version check.
+- **`Submit`:** minting, the POST, rejection and partial acceptance, the failure rule (D3).
+- **The socket reader** and the dispatch of `status`, `execution_start`, `execution_cached` and the
+  end event.
+- **Settling from the record,** the list read for jobs that haven't started (spec §8, rules 4
+  and 5); `Wait`, `Done`, `Cancel`, `Run`, `Close`.
+- **`comfytest`,** minimal and in memory (spec §7.11): replaying the success, rejected, partial,
+  error, cancel and pending recordings, embedded from `internal/comfytest/recordings/`.
+- **Tests:** those recordings' cases ported from tscomfy, inside `synctest.Test`; a live `Dial`
+  test.
+- **Settles:** `Run`'s cancel timeout, `HTTPError.Body` truncation, the record read timeout, the
+  websocket read limit.
+- **Exit:** a recorded run submits, settles and returns its result through the fake server, and
+  no goroutine outlives `Close`.
+
+### 3. Events
+
+- JSON and binary decoding, `progress_state` differences, live outputs, blocked and text events.
+- The bounded, coalescing buffer and the iterator's semantics (spec §7.7).
+- Fuzz tests of the decoders; the sampler, websocket and blocked recordings.
+- **Settles:** the `TextEvent` cap.
+
+### 4. Robustness
+
+- Reconnects (fresh id, backoff, budget), pings, the record-reading rules, "started" from
+  records, close semantics.
+- Fault-injection tests: sockets dropped mid-run, silent sockets, 404 records, a slow reader's
+  memory bound, server restarts. All on fake time, with leak checks (spec §9).
+- **Settles:** ping interval, timeout and idle threshold.
+
+### 5. Files
+
+`Upload`, `Open`, `FileURL`, output parsing (spec §7.8, §7.9).
+
+### 6. Live tests
+
+Against the owner's local ComfyUI, with model-free prompts, opt-in (`TSCOMFY_GO_LIVE_URL`).
+
+### 7. Release
+
+- `comfytest` made public if its API is settled (**settles** that).
+- Guides: getting started, writing workflows, running jobs, deploying.
+- `examples/txt2img`: workflows, generated Go, an HTTP handler that streams progress over SSE.
+- `release.yml`; v0.1.0 tagged and published from CI. Whether to check API compatibility from
+  then on (with `apidiff`, which needs an entry in `docs/decisions.md`) is decided here.
+
+## Requests to tscomfy
+
+None needed. Noted for the owner, not blocking:
+
+- `@tscomfy/client` announces `supports_progress_text_metadata` and decodes a prompt-id prefix on
+  progress text, but ComfyUI 0.42 has neither (the flag exists only on its unmerged
+  `progress-text-prompt-id` branch).
+- `param(node, input)` can't type-check `input`, because `Out` and `NodeHandle` don't carry their
+  node's class (`packages/core/src/graph/types.ts`). The export catches a wrong input name.
+
+tscomfy is not changed from this repository.
+
+## History
+
+- **2026-10-19, first design session** (in the tscomfy repo): a Bun binary that Go ran once per
+  request. Superseded the same day.
+- **2026-10-19, second session:** measured running TypeScript per request and its alternatives,
+  and replaced it with templates generated at development time (D1). Surveyed Go libraries for
+  remote jobs (D2).
+- **2026-10-20:** the plan split into this roadmap, `docs/spec.md` and six ADRs.
+- **2026-10-20, review:** the spec was checked against ComfyUI 0.42's source, tscomfy and Go
+  1.27, and the owner approved these changes:
+  - Corrected: progress text never carries a prompt id (`supports_progress_text_metadata` isn't
+    in ComfyUI 0.42); the job API dates from ComfyUI 0.6, so the version check, not a probe of
+    `/api/jobs`, is what guards the per-job cancel; the fake server can't run on a real socket
+    under `testing/synctest`, so it runs in memory.
+  - Only the latest releases are supported (ComfyUI 0.42).
+  - The generator checks the template format, not the package version.
+  - Templates lost `default` (read from the prompt) and `source` (unused, churned every file).
+  - The client lost `ClientID`, `Features`, `Job.Progress`, tscomfy's diagnostics model (now
+    `NodeError` and `RejectedError` fields), output kind guessing, and `UploadOptions.ContentType`;
+    `workflow` lost `Template.Nodes`; the generator lost `-pkg` and default exports.
+  - One list read replaced per-job reads for jobs that haven't started; the 404 rule was settled.
+  - `comfytest` starts internal; the npm API report and `apidiff` were dropped for now.
+  - The six ADRs became `docs/decisions.md`.
