@@ -64,12 +64,29 @@ linters:
           deny:
             - pkg: github.com/coder/websocket
               desc: workflow knows nothing about sockets (spec §2.2)
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint # writes of messages to stderr or a buffer; a failure is not actionable
+        - fmt.Fprintf
+        - fmt.Fprintln
     exhaustive:
       default-signifies-exhaustive: true
     gocritic:
       enabled-tags:
         - diagnostic
         - performance
+      disabled-checks:
+        - hugeParam # copying a struct of a few hundred bytes outside hot paths reads better
+        - rangeValCopy # likewise
+    gosec:
+      excludes:
+        # The generator writes source files from paths the developer gives it, as gofmt does:
+        # world-readable modes and variable paths are the point, not a hazard.
+        - G301
+        - G302
+        - G304
+        - G306
+        - G703
     govet:
       enable-all: true
       disable:

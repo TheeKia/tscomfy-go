@@ -9,8 +9,8 @@ commit; this file only tracks the work.
 
 | Phase | State |
 |---|---|
-| 0. Setup | In progress: repository set up, gate green locally; CI on GitHub remaining |
-| 1. Templates | Not started |
+| 0. Setup | Done 2026-10-20: gate green locally and in CI |
+| 1. Templates | Done 2026-10-20: TypeScript to committed Go, byte-identical to tscomfy |
 | 2. Client core | Not started |
 | 3. Events | Not started |
 | 4. Robustness | Not started |
@@ -58,12 +58,19 @@ commit; this file only tracks the work.
     `cmd/tscomfy-go/` (a `main` package can't be empty) and the `@tscomfy/core`, `@tscomfy/cli`
     and `@types/bun` dev dependencies in Phase 1; `github.com/coder/websocket` in `go.mod` in
     Phase 2 (`go mod tidy` drops a requirement nothing imports).
-- **Remaining:** the GitHub repository, the first commit, and CI green on it.
+- **GitHub:** `github.com/TheeKia/tscomfy-go` (public); CI green on the first commit.
 - **Exit:** `make check` is green on the empty packages, locally and in CI.
 
 ### 1. Templates
 
-No ComfyUI needed.
+No ComfyUI needed. **Done 2026-10-20.** The export runs as `bun x --bun --no-install
+tscomfy-go-export index.ts` (spec §6.1). `template` checks everything it can when it is defined
+(§3.6). The tests replaced four of tscomfy's mock schemas with `params.json`, written here,
+because none of the four has an output node, so tscomfy's validation refused every prompt of
+them. An independent review then found and fixed: template names that `go build` skips
+(`_test`, `_<GOOS>`), node ids that broke out of comments, defaults that `template` accepted and
+`Load` refused, golden output that nothing compiled, and the example's TypeScript missing from
+`tsc -b`.
 
 - **`@tscomfy/go`:** `template`, `param`, the export command and its checks (spec §3).
 - **The template format** types in `internal/format` (spec §4).

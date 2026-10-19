@@ -17,6 +17,9 @@
     "url": "git+https://github.com/TheeKia/tscomfy-go.git",
     "directory": "ts"
   },
+  "bin": {
+    "tscomfy-go-export": "./dist/main.js"
+  },
   "files": [
     "dist",
     "!dist/**/*.tsbuildinfo",
@@ -33,6 +36,9 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@tscomfy/core": "0.2.1"
   },
   "peerDependencies": {
     "@tscomfy/core": "^0.2.1"

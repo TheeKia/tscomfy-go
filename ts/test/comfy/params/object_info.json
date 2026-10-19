@@ -1,0 +1,192 @@
+{
+  "MockParams": {
+    "input": {
+      "required": {
+        "seed": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 18446744073709551615,
+            "control_after_generate": true
+          }
+        ],
+        "signed": [
+          "INT",
+          {
+            "default": 0,
+            "min": -9223372036854775808,
+            "max": 9223372036854775807
+          }
+        ],
+        "count": [
+          "INT",
+          {
+            "default": 4,
+            "min": 1,
+            "max": 64
+          }
+        ],
+        "unbounded": [
+          "INT",
+          {
+            "default": 0
+          }
+        ],
+        "beyond": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 1180591620717411303424
+          }
+        ],
+        "ratio": [
+          "FLOAT",
+          {
+            "default": 0.5,
+            "min": 0.0,
+            "max": 1.0,
+            "step": 0.01
+          }
+        ],
+        "huge_float": [
+          "FLOAT",
+          {
+            "default": 0,
+            "min": -18446744073709551615,
+            "max": 18446744073709551615
+          }
+        ],
+        "text": [
+          "STRING",
+          {
+            "multiline": true,
+            "default": ""
+          }
+        ],
+        "toggle": [
+          "BOOLEAN",
+          {
+            "default": true
+          }
+        ],
+        "choice": [["first", "second", "third"]]
+      },
+      "optional": {
+        "image": ["IMAGE"],
+        "note": ["STRING"],
+        "numeric": [[1, 2, 4]],
+        "tags": [
+          "COMBO",
+          {
+            "options": ["red", "green", "blue"],
+            "multiselect": true,
+            "default": ["red"]
+          }
+        ],
+        "layers": [
+          "COMFY_AUTOGROW_V3",
+          {
+            "template": {
+              "input": {
+                "required": {
+                  "layer": ["IMAGE", {}]
+                }
+              },
+              "prefix": "layer",
+              "min": 0,
+              "max": 4
+            }
+          }
+        ],
+        "mode": [
+          "COMFY_DYNAMICCOMBO_V3",
+          {
+            "options": [
+              {
+                "key": "keep",
+                "inputs": {
+                  "required": {}
+                }
+              },
+              {
+                "key": "scale",
+                "inputs": {
+                  "required": {
+                    "factor": [
+                      "FLOAT",
+                      {
+                        "default": 1.0,
+                        "min": 0.01,
+                        "max": 8.0
+                      }
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    "input_order": {
+      "required": [
+        "seed",
+        "signed",
+        "count",
+        "unbounded",
+        "beyond",
+        "ratio",
+        "huge_float",
+        "text",
+        "toggle",
+        "choice"
+      ],
+      "optional": ["image", "note", "numeric", "tags", "layers", "mode"]
+    },
+    "is_input_list": false,
+    "output": [],
+    "output_is_list": [],
+    "output_name": [],
+    "output_tooltips": [],
+    "name": "MockParams",
+    "display_name": "Mock Params",
+    "description": "One input of every kind a template parameter can or can't have, on an output node so that a prompt of it alone is valid.",
+    "python_module": "custom_nodes.mock-params",
+    "category": "mock/params",
+    "output_node": true,
+    "deprecated": false,
+    "experimental": false
+  },
+  "MockNumber": {
+    "input": {
+      "required": {
+        "value": [
+          "INT",
+          {
+            "default": 0,
+            "min": 0,
+            "max": 100
+          }
+        ]
+      }
+    },
+    "input_order": {
+      "required": ["value"]
+    },
+    "is_input_list": false,
+    "output": ["INT"],
+    "output_is_list": [false],
+    "output_name": ["INT"],
+    "output_tooltips": [null],
+    "name": "MockNumber",
+    "display_name": "Mock Number",
+    "description": "Outputs an integer, to link into a widget input.",
+    "python_module": "custom_nodes.mock-params",
+    "category": "mock/params",
+    "output_node": false,
+    "deprecated": false,
+    "experimental": false
+  }
+}

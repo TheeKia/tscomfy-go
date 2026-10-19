@@ -1,0 +1,18 @@
+{
+  "name": "@tscomfy-go/example-txt2img-workflows",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The txt2img example's workflows, written with tscomfy and turned into Go by go generate.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "schema": "tscomfy generate --from ../../../testdata/object-info/basic-pipeline.json --out comfy/local --name local --import-extension .ts --quiet"
+  },
+  "dependencies": {
+    "@tscomfy/core": "0.2.1",
+    "@tscomfy/go": "workspace:*"
+  },
+  "devDependencies": {
+    "@tscomfy/cli": "0.2.1"
+  }
+}

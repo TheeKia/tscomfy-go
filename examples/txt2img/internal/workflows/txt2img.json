@@ -1,0 +1,168 @@
+{
+  "format": 1,
+  "name": "txt2img",
+  "params": [
+    {
+      "name": "prompt",
+      "node": "positive",
+      "input": "text",
+      "kind": "string"
+    },
+    {
+      "name": "seed",
+      "node": "sampler",
+      "input": "seed",
+      "kind": "int",
+      "min": 0,
+      "max": 18446744073709551615
+    },
+    {
+      "name": "negative",
+      "node": "negative",
+      "input": "text",
+      "kind": "string",
+      "optional": true
+    },
+    {
+      "name": "steps",
+      "node": "sampler",
+      "input": "steps",
+      "kind": "int",
+      "min": 1,
+      "max": 10000,
+      "optional": true
+    },
+    {
+      "name": "width",
+      "node": "latent",
+      "input": "width",
+      "kind": "int",
+      "min": 16,
+      "max": 16384,
+      "optional": true
+    },
+    {
+      "name": "height",
+      "node": "latent",
+      "input": "height",
+      "kind": "int",
+      "min": 16,
+      "max": 16384,
+      "optional": true
+    },
+    {
+      "name": "checkpoint",
+      "node": "checkpoint",
+      "input": "ckpt_name",
+      "kind": "combo",
+      "optional": true
+    }
+  ],
+  "prompt": {
+    "checkpoint": {
+      "inputs": {
+        "ckpt_name": "model-a.safetensors"
+      },
+      "class_type": "CheckpointLoaderSimple",
+      "_meta": {
+        "title": "Load Checkpoint"
+      }
+    },
+    "positive": {
+      "inputs": {
+        "text": "a cat in a hat",
+        "clip": [
+          "checkpoint",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "negative": {
+      "inputs": {
+        "text": "",
+        "clip": [
+          "checkpoint",
+          1
+        ]
+      },
+      "class_type": "CLIPTextEncode",
+      "_meta": {
+        "title": "CLIP Text Encode (Prompt)"
+      }
+    },
+    "latent": {
+      "inputs": {
+        "width": 1024,
+        "height": 1024,
+        "batch_size": 1
+      },
+      "class_type": "EmptyLatentImage",
+      "_meta": {
+        "title": "Empty Latent Image"
+      }
+    },
+    "sampler": {
+      "inputs": {
+        "seed": 0,
+        "steps": 30,
+        "cfg": 8,
+        "sampler_name": "euler",
+        "scheduler": "normal",
+        "denoise": 1,
+        "model": [
+          "checkpoint",
+          0
+        ],
+        "positive": [
+          "positive",
+          0
+        ],
+        "negative": [
+          "negative",
+          0
+        ],
+        "latent_image": [
+          "latent",
+          0
+        ]
+      },
+      "class_type": "KSampler",
+      "_meta": {
+        "title": "KSampler"
+      }
+    },
+    "decode": {
+      "inputs": {
+        "samples": [
+          "sampler",
+          0
+        ],
+        "vae": [
+          "checkpoint",
+          2
+        ]
+      },
+      "class_type": "VAEDecode",
+      "_meta": {
+        "title": "VAE Decode"
+      }
+    },
+    "save": {
+      "inputs": {
+        "filename_prefix": "txt2img",
+        "images": [
+          "decode",
+          0
+        ]
+      },
+      "class_type": "SaveImage",
+      "_meta": {
+        "title": "Save Image"
+      }
+    }
+  }
+}

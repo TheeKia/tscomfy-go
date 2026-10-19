@@ -78,7 +78,7 @@ workflows/            TypeScript, Bun                      internal/workflows/  
 | `comfy` | The ComfyUI client (§7) |
 | `workflow` | Loads templates and fills in parameter values (§5) |
 | `cmd/tscomfy-go` | The generator, run with `go tool tscomfy-go` (§6) |
-| `internal/format` | The template format's types, shared by `workflow` and the generator (§4) |
+| `internal/format` | Reads and checks the template format and the export's output (§3.5, §4), for `workflow` and the generator |
 | `internal/comfytest` | A fake ComfyUI for this module's tests (§7.11) |
 | `ts/` (`@tscomfy/go`) | `template`, `param` and the export command (§3) |
 
@@ -96,9 +96,10 @@ comfy/                 workflow/        cmd/tscomfy-go/        internal/format/
 internal/comfytest/    the fake server; recordings/ holds the protocol recordings copied from
                        tscomfy, embedded with go:embed, with a README of their provenance
 ts/                    the npm package @tscomfy/go
-testdata/object-info/  mock schemas copied from tscomfy's fixtures, with a README of their provenance
-examples/txt2img/      workflows/ (a workspace member, schema generated from a mock), generated Go,
-                       an HTTP handler that streams progress over SSE
+testdata/object-info/  mock schemas: basic-pipeline.json copied from tscomfy, params.json written
+                       here; a README states their provenance
+examples/txt2img/      workflows/ (a workspace member, schema generated from a mock), main.go (the
+                       go:generate directive), internal/workflows/ (generated)
 docs/                  spec.md, plan.md, decisions.md, research/, guides/
 ```
 
@@ -161,9 +162,8 @@ export function template<N>(
 export function param(node: NodeHandle | Out<string>, input: string, options?: ParamOptions): Param;
 ```
 
-Exact type names may be refined in Phase 1; the shape is fixed: templates are plain data built
-eagerly at import (tscomfy's `workflow` calls `build` at once), and `param` records a node id and
-an input name. The package follows tscomfy's TypeScript conventions: strict compiler options
+Templates are plain data built eagerly at import (tscomfy's `workflow` calls `build` at once),
+and `param` records a node id and an input name. The package follows tscomfy's TypeScript conventions: strict compiler options
 (`tsconfig.base.json` there), oxlint and oxfmt with tscomfy's configs, no default exports. Every
 public declaration lives in `ts/src/index.ts`, so that file's diff is the package's API diff.
 
@@ -212,6 +212,9 @@ export { txt2img } from "./txt2img.ts";
 - `name` matches `^[a-z][a-z0-9_]*$`; it also names the template's files (`<name>.json`,
   `<name>.go`). Parameter names match `^[A-Za-z][A-Za-z0-9_]*$`. Both must convert to distinct Go
   identifiers (§6.3).
+- `<name>.go` must be a file `go build` compiles everywhere: the name can't end in `_test`, or in
+  `_<GOOS>`, `_<GOARCH>` or both (`up_windows`, `x_amd64`). The generator checks it with
+  `go/build`, which knows the current lists.
 
 ### 3.3 `param(node, input, options?)`
 
@@ -233,23 +236,46 @@ export { txt2img } from "./txt2img.ts";
 
 ### 3.5 The export command
 
-A `bin` of `@tscomfy/go`, run by the generator (§6.1); not meant for direct use.
+`tscomfy-go-export <entry>`, a `bin` of `@tscomfy/go` run by the generator (§6.1); not meant
+for direct use.
 
 - It imports the entry module (`index.ts` in the workflows directory) and takes every named
   export, each of which must be a template that `template` made. Anything else exported, a
-  default export included, is an error.
-- It builds each workflow with tscomfy, exports it with `toApi` (which validates it), and prints
-  one JSON document to stdout: `{"format":1,"templates":[<template>, …]}`, each template as in
-  §4, written with tscomfy's `stringify`. Templates are sorted by name (byte order).
-- It fails with a non-zero exit and a message naming the workflow and parameter when:
-  - tscomfy's validation reports an error (`ValidationError`);
-  - two templates share a name, or a name breaks the rules of §3.2;
-  - two parameters of a template name the same node and input;
-  - a parameter's input is not one of its node class's inputs in the schema;
-  - a parameter's input holds a link, or is absent from the prompt (give it a value);
-  - a parameter's input kind is not one of `int`, `float`, `string`, `boolean`, `combo`;
-  - a combo parameter is multi-select, or has an option that isn't a string.
+  default export included, is an error, and so are two templates of one name.
+- It prints one JSON document to stdout: `{"format":1,"templates":[<template>, …]}`, each
+  template as in §4, written with tscomfy's `stringify`. Templates are sorted by name (byte
+  order).
+- On an error, and when importing the module throws, it prints the message to stderr and exits
+  non-zero. A template that breaks a rule of §3.6 throws when the module defines it.
 - It does no I/O besides reading the modules and writing stdout and stderr.
+
+### 3.6 What `template` checks
+
+`template` builds the workflow at once, exports it with `toApi` (which validates it), and makes
+the template document, so a mistake fails where the workflow is defined: in the editor's test
+run, in `bun test`, or in `go generate`. It throws an `Error` naming the template and the
+parameter when:
+
+- tscomfy's validation reports an error (the `Error`'s `cause` is the `ValidationError`);
+- the name, or a parameter's name, breaks the rules of §3.2;
+- `build` returns something other than an object of values made by `param`;
+- two parameters name the same node and input;
+- a parameter's node isn't in the workflow, or its class isn't in the schema;
+- a parameter's input is not one of its node class's inputs in the schema;
+- a parameter's input kind is not one of `int`, `float`, `string`, `boolean`, `combo`, or it is
+  a multi-select combo or one with an option that isn't a string;
+- a parameter's node isn't in the prompt (bypassed or muted), or its input holds a link or is
+  absent from the prompt (give it a value);
+- a parameter's value doesn't fit its kind: an int that isn't a safe integer or a `bigint` (an
+  int beyond 2^53 written as a number is rounded and lands in exponent form: write it as a
+  `bigint`), a float that isn't a number, a string or combo that isn't a string, a boolean that
+  isn't one;
+- a string anywhere in the prompt isn't well-formed Unicode (a lone surrogate, which no Go string
+  can hold).
+
+The error is a `TemplateError`. The export command prints its message alone and any other error
+with its stack, so a bug in the workflows' own code shows where it is. The generator checks each
+template once more as `workflow.Load` does (§6.2), bounds included.
 
 ## 4. Template format v1
 
@@ -347,8 +373,11 @@ type ParamError struct {
   These are exactly the types the generator emits (§6.3), so `Fill` uses a type switch, no
   reflection. Any other type is `ErrWrongType`; `float32` in particular, since its shortest
   decimal form (`0.1`) is not the value a `float64` holds, so no tscomfy build could produce it.
-  A negative zero is written as `0`, as tscomfy's `stringify` writes it (`encoding/json/v2` alone
-  writes `-0`, verified 2026-10-20). A string that isn't valid UTF-8 is `ErrWrongType`.
+  A float is written as tscomfy's `stringify` writes it: as JavaScript's `JSON.stringify` does
+  (`jsontext.AppendFloat`), except that a negative zero is `0` (`encoding/json/v2` alone writes
+  `-0`, verified 2026-10-20) and a float from 2^53 up, every one of which is an integer, is in
+  exponent form (`1e+17`; `stringify` does that so the number reads back as a float). A string
+  that isn't valid UTF-8 is `ErrWrongType`.
 
 - **`nil`** (an untyped nil, or a nil pointer) keeps the default. It is allowed only for optional
   parameters; for a required one it is `ErrRequired`.
@@ -368,8 +397,11 @@ type ParamError struct {
 - Flags: `-workflows` (the TypeScript project; its `index.ts` is the entry) and `-out` (the Go
   package directory). The package name is the base name of `-out`, which must be a valid Go
   package name.
-- It runs the export command (§3.5) with Bun in the workflows directory, so the project's own
-  installed `@tscomfy/*` versions are used. The exact invocation is **(settle in Phase 1)**.
+- It runs the export command (§3.5) in the workflows directory as `bun x --bun --no-install
+  tscomfy-go-export index.ts`: `bun x` finds the bin of the `@tscomfy/go` the project installed
+  (in its `node_modules/.bin`, or a parent's in a workspace), so the project's own `@tscomfy/*`
+  versions are used, and `--no-install` keeps it from downloading one when there is none.
+  Settled in Phase 1.
 - The export command reports its `format` (§3.5). When it isn't the one the generator reads (1),
   the generator stops, changing nothing, and says to install the `@tscomfy/go` version that
   matches the Go module (D4).
@@ -394,9 +426,9 @@ import (
 )
 
 //go:embed txt2img.json
-var txt2imgJSON []byte
+var txt2ImgJSON []byte
 
-var txt2imgTemplate = workflow.MustLoad(txt2imgJSON)
+var txt2ImgTemplate = workflow.MustLoad(txt2ImgJSON)
 
 // Txt2Img holds the parameters of the txt2img workflow. Optional fields left
 // nil keep the value written in the workflow.
@@ -413,7 +445,7 @@ type Txt2Img struct {
 // Build returns the txt2img prompt with p's values. It reports values outside
 // an input's bounds as a *workflow.ParamError; the server validates the rest.
 func (p Txt2Img) Build() (comfy.Prompt, error) {
-	return txt2imgTemplate.Fill(p.Prompt, p.Seed, p.Negative, p.Steps, p.Width, p.Height, p.Checkpoint)
+	return txt2ImgTemplate.Fill(p.Prompt, p.Seed, p.Negative, p.Steps, p.Width, p.Height, p.Checkpoint)
 }
 
 // The txt2img nodes, by the ids given in the workflow.
@@ -429,13 +461,19 @@ const (
 ```
 
 - The first line matches Go's generated-code convention, so tools skip the file.
-- The field comments show each parameter's node and input, its bounds, and an optional one's
-  default, read from the prompt.
+- Each field's comment shows its node and input, its bounds (`1 to 10000`, `at least 1`,
+  `at most 8`), and an optional one's default, read from the prompt; a string default longer than
+  40 characters is cut, with `…`.
+- A template without parameters is an empty struct whose `Build` returns the prompt as written.
 - The §3.1 example's values come from the mock schema `basic-pipeline.json`, which is what this
   repository's example is generated from (§2.3).
 - Output is gofmt'd and deterministic. Constants are in prompt order.
-- Before writing, the generator loads every template with `workflow.Load`, so `MustLoad` cannot
-  fail on a file it wrote.
+- Before writing, the generator checks the very bytes it writes and embeds with `format.Parse`,
+  which is what `workflow.Load` runs, so `MustLoad` cannot fail on a file it wrote.
+- `Build`'s comment names what `Fill` refuses: a value outside its input's bounds, a float that
+  isn't finite, a string that isn't valid UTF-8.
+- A node id or input name that isn't all printable is quoted in the field comment, so it can't
+  end the comment.
 
 ### 6.3 Types and names
 
@@ -447,20 +485,23 @@ const (
   | `boolean` | | `bool` |
   | `float` | | `float64` |
   | `int` | both present and within −2^31 … 2^31−1 | `int` |
-  | `int` | `min ≥ 0` and `max > 2^63−1` | `uint64` |
-  | `int` | otherwise, within the `int64` range, or a bound missing | `int64` |
-  | `int` | outside both `int64` and `uint64` | error |
+  | `int` | both present, `min ≥ 0` and 2^63 ≤ `max` ≤ 2^64−1 | `uint64` |
+  | `int` | each bound present within the `int64` range | `int64` |
+  | `int` | anything else | error |
 
   An optional parameter's field is a pointer to its type: `Steps: new(20)` (Go 1.26's
   `new(expr)`).
 - **Identifiers:** a workflow name, parameter name or node id is split at every character that
   isn't an ASCII letter or digit, and before every letter that follows a digit; each part is
   capitalized and the parts are joined. `txt2img` → `Txt2Img`, `filename_prefix` →
-  `FilenamePrefix`, `blur0` → `Blur0`. A name that yields no identifier, or that starts with a
-  digit after conversion, is an error.
+  `FilenamePrefix`, `blur0` → `Blur0`, `vae_decode2x` → `VaeDecode2X`. A workflow name or
+  parameter name that yields no identifier, or one starting with a digit, is an error; so is a
+  node id that yields nothing (a node's part follows the workflow's, so it may start with a
+  digit).
 - **Collisions:** two declarations in the package with the same identifier, or a parameter whose
   field would be `Build`, are errors that name both sources.
-- **Unexported names** (the embedded bytes, the template) are derived from the workflow name.
+- **Unexported names** are the type's name with its first letter lowered, plus `JSON` (the
+  embedded bytes) or `Template`: `txt2ImgJSON`, `txt2ImgTemplate`.
 
 ### 6.4 Constants
 
@@ -472,8 +513,12 @@ One `comfy.NodeID` constant per node whose id is not made only of digits, named
 - The output directory belongs to the generator. It holds only files the generator wrote (a `.go`
   file with the header of §6.2, or the `.json` next to one).
 - The generator replaces the directory's generated files and deletes those of workflows that no
-  longer exist. It refuses to run, changing nothing, when the directory holds any other file.
-- On any error nothing is written.
+  longer exist; a file whose content is unchanged is left alone. It writes each file through a
+  temporary one (`.tscomfy-go-*`) and a rename, and deletes temporary files a killed run left.
+  It refuses to run, changing nothing, when the directory holds any other file, a subdirectory or
+  a symlink.
+- When the export or the generation fails, nothing is written. An I/O error while writing can
+  leave some files replaced; the next run puts the directory right.
 
 ## 7. The client: package `comfy`
 
@@ -858,22 +903,36 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
 
 - **The gate** is `make check`, run locally before any work is called done; CI runs the same:
   - Go: `gofmt` check, `go vet`, golangci-lint v2 (staticcheck included), `go test -race
-    -shuffle=on ./...`, `govulncheck`, short fuzz runs.
+    -shuffle=on ./...`, short fuzz runs (10 s per target, listed in the Makefile), `govulncheck`.
   - TypeScript: `tsc -b` (TypeScript 7), `oxlint --type-aware`, `oxfmt --check`, `bun test`.
   - **Tool versions** are pinned in the Makefile. govulncheck runs as `go run
     golang.org/x/vuln/cmd/govulncheck@<version>`, which leaves `go.mod` alone. golangci-lint is a
     binary: CI installs the pinned version with `golangci/golangci-lint-action`, and the Makefile
     refuses a local binary of another version.
-  - End to end: regenerate the example's schema from its mock with `tscomfy generate --from`,
-    run `go generate` for the example, build it, and check that nothing changed in git.
+  - End to end (`make e2e`): regenerate every committed generated file (`make fixtures`: the test
+    and example schemas from their mocks with `tscomfy generate --from`, the cross-language
+    fixture, and the example's Go with `go generate`), build the example, and fail when anything
+    differs from before. It compares against a copy rather than git, so it also works on
+    uncommitted changes.
+  - The steps run in order (`.NOTPARALLEL`), since the end-to-end check rewrites files.
 - **The cross-language property:** for a set of parameter values, tscomfy building the workflow
-  with them and `Fill` filling its template with them give byte-identical prompts. The values
-  cover 64-bit seeds, negative and boundary integers, floats (negative zero included), and strings
-  with escapes, emoji and U+2028.
-- **Generator:** golden tests on hand-written templates; tests for every error of §6.3 and §6.5.
-- **Export:** tests on the mock schemas in `testdata/object-info/` (copied from tscomfy's
-  fixtures; `combos.json`, `numbers.json`, `autogrow.json`, `dynamic-combo.json` and
-  `basic-pipeline.json` cover the kinds and failures); one test per failure of §3.5.
+  with them and `Fill` filling its template with them give byte-identical prompts.
+  `ts/test/cross-language.ts` builds the workflow with each set and writes the template and the
+  prompts tscomfy built to `workflow/testdata/cross-language.json`; Go's test fills the template
+  with the same values and compares bytes. The values cover 64-bit seeds, the int64 extremes,
+  integers beyond 2^53, floats (negative zero, the smallest, ones JavaScript writes in exponent
+  form, ones beyond 2^53), and strings with escapes, control characters, emoji and U+2028.
+- **Generator:** golden tests on a hand-written export (`cmd/tscomfy-go/testdata/export.json`).
+  The golden output is a package of the module, `cmd/tscomfy-go/internal/golden`, so the gate
+  compiles and vets it and a test imports it and calls its `Build` methods;
+  `go test ./cmd/tscomfy-go -update` rewrites it. Tests for every error of §3.2's file-name rule,
+  §6.3 and §6.5; the command run against a fake `bun`.
+- **`@tscomfy/go`:** tests on the mock schemas in `testdata/object-info/`: `basic-pipeline.json`
+  (copied from tscomfy) and `params.json` (written here: an output node with one input of every
+  kind a parameter can or can't have, so that a prompt of it alone validates); one test per
+  failure of §3.5 and §3.6. Their typed modules are generated into `ts/test/comfy/`. The export
+  command is run as a process on fixture modules (`ts/test/fixtures/`). `tsc -b` type-checks the
+  package, its tests and the example's workflows.
 - **Client:** fake-server tests replaying the recordings, with the cases of tscomfy's
   `packages/client/test/` (`job.test.ts`, `lifecycle.test.ts`, `parts.test.ts`) ported.
 - **Time and leaks:** every client test runs inside `synctest.Test` over `comfytest`'s in-memory
@@ -890,7 +949,6 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
 
 | Value | Section | Settled in |
 |---|---|---|
-| The export command's invocation | §6.1 | Phase 1 |
 | `Run`'s cancel timeout | §7.5 | Phase 2 |
 | `HTTPError.Body` truncation | §7.10 | Phase 2 |
 | The record read timeout | §8, rule 5 | Phase 2 |

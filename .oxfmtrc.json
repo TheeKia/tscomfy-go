@@ -2,5 +2,12 @@
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
   "printWidth": 100,
   "sortImports": { "newlinesBetween": false },
-  "ignorePatterns": ["**/*.md"]
+  "ignorePatterns": [
+    "**/*.md",
+    "**/testdata/**",
+    "ts/test/comfy/**",
+    "examples/*/workflows/comfy/**",
+    "examples/*/internal/**",
+    "cmd/tscomfy-go/internal/golden/**"
+  ]
 }

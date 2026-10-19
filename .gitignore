@@ -3,3 +3,6 @@ dist/
 *.tsbuildinfo
 coverage/
 *.coverprofile
+# Binaries go build writes in a command directory.
+/cmd/tscomfy-go/tscomfy-go
+/examples/txt2img/txt2img

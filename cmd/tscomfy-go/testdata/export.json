@@ -1,0 +1,100 @@
+{
+  "format": 1,
+  "templates": [
+    {
+      "format": 1,
+      "name": "bare",
+      "params": [],
+      "prompt": { "1": { "inputs": {}, "class_type": "Save" } }
+    },
+    {
+      "format": 1,
+      "name": "every_kind",
+      "params": [
+        {
+          "name": "seed",
+          "node": "sampler",
+          "input": "seed",
+          "kind": "int",
+          "min": 0,
+          "max": 18446744073709551615
+        },
+        {
+          "name": "steps",
+          "node": "sampler",
+          "input": "steps",
+          "kind": "int",
+          "min": 1,
+          "max": 10000,
+          "optional": true
+        },
+        {
+          "name": "offset",
+          "node": "sampler",
+          "input": "offset",
+          "kind": "int",
+          "min": -9223372036854775808,
+          "max": 9223372036854775807
+        },
+        {
+          "name": "batch",
+          "node": "sampler",
+          "input": "batch",
+          "kind": "int",
+          "min": 1,
+          "optional": true
+        },
+        { "name": "cfg", "node": "sampler", "input": "cfg", "kind": "float", "min": 0, "max": 100 },
+        {
+          "name": "denoise",
+          "node": "sampler",
+          "input": "denoise",
+          "kind": "float",
+          "max": 1,
+          "optional": true
+        },
+        {
+          "name": "prompt",
+          "node": "text-encode",
+          "input": "text",
+          "kind": "string",
+          "optional": true
+        },
+        {
+          "name": "tiled",
+          "node": "vae_decode2x",
+          "input": "tiled",
+          "kind": "boolean",
+          "optional": true
+        },
+        { "name": "sampler_name", "node": "sampler", "input": "sampler_name", "kind": "combo" }
+      ],
+      "prompt": {
+        "1": { "inputs": {}, "class_type": "Loader" },
+        "text-encode": {
+          "inputs": {
+            "text": "a very long prompt that goes on and on about a cat in a hat, “quoted”"
+          },
+          "class_type": "Encode"
+        },
+        "sampler": {
+          "inputs": {
+            "seed": 0,
+            "steps": 20,
+            "offset": -1,
+            "batch": 1,
+            "cfg": 7.5,
+            "denoise": 1,
+            "sampler_name": "euler",
+            "model": ["1", 0]
+          },
+          "class_type": "Sampler"
+        },
+        "vae_decode2x": {
+          "inputs": { "tiled": false, "samples": ["sampler", 0] },
+          "class_type": "Decode"
+        }
+      }
+    }
+  ]
+}

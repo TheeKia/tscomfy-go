@@ -1,0 +1,11 @@
+{
+  "codegen": "0.2.1",
+  "schema": "sha256:d5d4a756f4dd6babf304f6d3c2c06bb94d66289e853b2ad83358c2e82573f611",
+  "exportName": "params",
+  "importExtension": ".ts",
+  "files": {
+    "nodes.ts": "sha256:8164fe745a0752c8a927637a5f8d2d9e8ad035b73bb01323482710a8aa32be16",
+    "index.ts": "sha256:c46e58598b6a824d7a91b6df6dea053e15e95815066f69f44f4d4c2ab4c6c58e",
+    "object_info.json": "sha256:472ce6ee8eccb6be088d0ecd5285dc4a6b647e67a129d4386bb3de4c18e29d53"
+  }
+}

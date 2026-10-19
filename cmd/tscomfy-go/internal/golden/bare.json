@@ -1,0 +1,11 @@
+{
+  "format": 1,
+  "name": "bare",
+  "params": [],
+  "prompt": {
+    "1": {
+      "inputs": {},
+      "class_type": "Save"
+    }
+  }
+}

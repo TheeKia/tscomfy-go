@@ -40,5 +40,5 @@
     "typescript/no-deprecated": "error",
     "typescript/consistent-return": "off"
   },
-  "ignorePatterns": ["**/dist/**"]
+  "ignorePatterns": ["**/dist/**", "ts/test/comfy/**", "examples/*/workflows/comfy/**"]
 }

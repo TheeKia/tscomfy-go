@@ -22,9 +22,9 @@ request were measured and rejected (D1); don't re-propose them.
 **No backward compatibility.** Only the latest releases are supported: ComfyUI 0.42, Go 1.27,
 tscomfy 0.2, Bun 1.4, TypeScript 7 (spec §1.2). Don't write code for older versions.
 
-**Status:** Phase 0 (setup): the repository is set up and `make check` is green locally; CI on
-GitHub remains. Phase 1 (templates) is next. The plan's status table is kept current as phases
-close.
+**Status:** Phases 0 (setup) and 1 (templates) are done: a workflow in TypeScript becomes
+committed Go whose `Build()` matches tscomfy byte for byte. Phase 2 (client core) is next. The
+plan's status table is kept current as phases close.
 
 ## Where things are
 
@@ -32,11 +32,13 @@ The layout is spec §2.3; the packages are empty until their phase fills them.
 
 | Path | What |
 |---|---|
-| `Makefile` | The gate: `make check`, one target per step (spec §9); tool versions pinned here |
+| `Makefile` | The gate: `make check`, one target per step (spec §9); tool versions pinned here. `make fixtures` regenerates every committed generated file |
 | `comfy/`, `workflow/` | The public packages (spec §5, §7) |
-| `internal/format/`, `internal/comfytest/` | The template format's types; the fake ComfyUI, with `recordings/` (spec §7.11) |
-| `ts/` | The npm package `@tscomfy/go` (spec §3) |
-| `testdata/object-info/` | Mock schemas copied from tscomfy, for the export tests and the example |
+| `cmd/tscomfy-go/` | The generator (spec §6); its golden output is the package `internal/golden/` |
+| `internal/format/`, `internal/comfytest/` | Reading the template format; the fake ComfyUI, with `recordings/` (spec §7.11) |
+| `ts/` | The npm package `@tscomfy/go` (spec §3); `ts/test/comfy/` holds generated test schemas |
+| `examples/txt2img/` | The example: workflows in TypeScript, the generated Go, `main.go` |
+| `testdata/object-info/` | Mock schemas, for the tests of `@tscomfy/go` and the example |
 | `.golangci.yml`, `.oxlintrc.json`, `.oxfmtrc.json`, `tsconfig.base.json` | Lint, format and compiler settings |
 | `.github/workflows/check.yml` | CI: runs `make check` |
 | `docs/spec.md` | The design: authoring (§3), template format (§4), `workflow` (§5), the generator (§6), the client (§7), protocol rules (§8), tests and the gate (§9), open values (§10) |

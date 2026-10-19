@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "incremental": true,
+    "tsBuildInfoFile": "../dist/test.tsbuildinfo",
+    "types": ["bun"],
+    "isolatedDeclarations": false,
+    "declaration": false,
+    "declarationMap": false
+  },
+  "include": ["."]
+}
