@@ -1,4 +1,3 @@
-#!/usr/bin/env bun
 // The export command tscomfy-go's generator runs (docs/spec.md §3.5): `tscomfy-go-export
 // <entry module>` imports the workflows module and prints its export document on stdout.
 

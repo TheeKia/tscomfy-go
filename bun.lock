@@ -28,7 +28,7 @@
       "name": "@tscomfy/go",
       "version": "0.0.0",
       "bin": {
-        "tscomfy-go-export": "./dist/main.js",
+        "tscomfy-go-export": "./bin/tscomfy-go-export.js",
       },
       "devDependencies": {
         "@tscomfy/core": "0.2.1",

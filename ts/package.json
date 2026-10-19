@@ -18,9 +18,10 @@
     "directory": "ts"
   },
   "bin": {
-    "tscomfy-go-export": "./dist/main.js"
+    "tscomfy-go-export": "./bin/tscomfy-go-export.js"
   },
   "files": [
+    "bin",
     "dist",
     "!dist/**/*.tsbuildinfo",
     "src"
