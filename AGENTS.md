@@ -22,13 +22,13 @@ request were measured and rejected (D1); don't re-propose them.
 **No backward compatibility.** Only the latest releases are supported: ComfyUI 0.42, Go 1.27,
 tscomfy 0.2, Bun 1.4, TypeScript 7 (spec §1.2). Don't write code for older versions.
 
-**Status:** Phases 0 (setup) and 1 (templates) are done: a workflow in TypeScript becomes
-committed Go whose `Build()` matches tscomfy byte for byte. Phase 2 (client core) is next. The
+**Status:** Phases 0 to 6 are done: templates, the client, and live tests that pass against the
+owner's ComfyUI 0.42. Phase 7 (release) waits on the owner's npm setup and the v0.1.0 tag. The
 plan's status table is kept current as phases close.
 
 ## Where things are
 
-The layout is spec §2.3; the packages are empty until their phase fills them.
+The layout is spec §2.3.
 
 | Path | What |
 |---|---|
@@ -37,10 +37,11 @@ The layout is spec §2.3; the packages are empty until their phase fills them.
 | `cmd/tscomfy-go/` | The generator (spec §6); its golden output is the package `internal/golden/` |
 | `internal/format/`, `internal/comfytest/` | Reading the template format; the fake ComfyUI, with `recordings/` (spec §7.11) |
 | `ts/` | The npm package `@tscomfy/go` (spec §3); `ts/test/comfy/` holds generated test schemas |
-| `examples/txt2img/` | The example: workflows in TypeScript, the generated Go, `main.go` |
+| `examples/txt2img/` | The example: workflows in TypeScript, the generated Go, an SSE handler in `main.go` |
+| `docs/guides/` | Getting started, writing workflows, running jobs, deploying |
 | `testdata/object-info/` | Mock schemas, for the tests of `@tscomfy/go` and the example |
 | `.golangci.yml`, `.oxlintrc.json`, `.oxfmtrc.json`, `tsconfig.base.json` | Lint, format and compiler settings |
-| `.github/workflows/check.yml` | CI: runs `make check` |
+| `.github/workflows/check.yml`, `release.yml` | CI: runs `make check`; on a `v*` tag, releases |
 | `docs/spec.md` | The design: authoring (§3), template format (§4), `workflow` (§5), the generator (§6), the client (§7), protocol rules (§8), tests and the gate (§9), open values (§10) |
 | `docs/decisions.md` | D1 to D4: the decisions someone could propose to undo, with what was rejected |
 | `docs/research/runtime-and-templates.md` | The measurements behind D1, and the prototype code for template export (TypeScript) and fill (Go) that Phase 1 starts from |

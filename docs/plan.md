@@ -11,12 +11,12 @@ commit; this file only tracks the work.
 |---|---|
 | 0. Setup | Done 2026-10-20: gate green locally and in CI |
 | 1. Templates | Done 2026-10-20: TypeScript to committed Go, byte-identical to tscomfy |
-| 2. Client core | Not started |
-| 3. Events | Not started |
-| 4. Robustness | Not started |
-| 5. Files | Not started |
-| 6. Live tests | Not started |
-| 7. Release | Not started |
+| 2. Client core | Done 2026-10-20 |
+| 3. Events | Done 2026-10-20 |
+| 4. Robustness | Done 2026-10-20 |
+| 5. Files | Done 2026-10-20 |
+| 6. Live tests | Done 2026-10-20: all pass against the owner's ComfyUI 0.42 |
+| 7. Release | In progress: guides, example and `release.yml` done; the owner's npm setup and v0.1.0 remain |
 
 ## Rules for every phase
 
@@ -91,6 +91,23 @@ them. An independent review then found and fixed: template names that `go build`
 - **Exit:** a workflow in TypeScript becomes committed Go whose `Build()` output matches tscomfy's
   own, byte for byte.
 
+### 2 to 6. The client, done 2026-10-20
+
+Built together, since each part's tests run through the same fake: `comfy` (spec §7, §8) and
+`internal/comfytest`, the fake ComfyUI over in-memory connections that every client test runs
+inside `synctest.Test` (fake time, and a goroutine that outlives `Close` fails the test). The
+settled values are in spec §10. An independent review found, and the fixes and their tests
+cover: record reads that gave up during outages the reconnect budget should ride out; an idle
+ping under the caller's context that could kill the shared socket; a job registered on a socket
+that had just dropped; `Cancel` doing nothing for jobs that ended unsettled; `Dial` calling its
+own deadline an unsupported server; coalescing that lost `SaveImageWebsocket` images; Python's
+lone surrogates failing to decode; and fake-server faults that let tests pass for the wrong
+reason. Every rule of §8 that a test guards was checked by breaking it (the test then fails).
+The live tests run a model-free prompt, a 63-bit integer round trip, `SaveImageWebsocket`, a
+rejection, a node error, cancels of a running and a queued job, and an upload into `LoadImage`.
+
+The phases as planned:
+
 ### 2. Client core
 
 Read first: the tscomfy files listed in AGENTS.md for Phase 2.
@@ -136,11 +153,19 @@ Against the owner's local ComfyUI, with model-free prompts, opt-in (`TSCOMFY_GO_
 
 ### 7. Release
 
-- `comfytest` made public if its API is settled (**settles** that).
-- Guides: getting started, writing workflows, running jobs, deploying.
+- `comfytest` made public if its API is settled (**settles** that). **Settled:** internal in
+  v0.1 (spec §7.11).
+- Guides: getting started, writing workflows, running jobs, deploying. **Done:** `docs/guides/`.
 - `examples/txt2img`: workflows, generated Go, an HTTP handler that streams progress over SSE.
-- `release.yml`; v0.1.0 tagged and published from CI. Whether to check API compatibility from
-  then on (with `apidiff`, which needs an entry in `docs/decisions.md`) is decided here.
+  **Done**, with a test against the fake server.
+- `release.yml`; v0.1.0 tagged and published from CI. **`release.yml` done:** on a `v*` tag it
+  checks the tag against `ts/package.json`, runs the gate, packs `@tscomfy/go`, installs the
+  tarball in a fresh project and runs the generator on it, then publishes with npm trusted
+  publishing. **Remaining, the owner's:** the trusted publisher for `@tscomfy/go` on npm (it names
+  this repository and `release.yml`), then the version bump to 0.1.0 and the tag.
+- API compatibility checks (`apidiff`): **not for 0.x.** The project supports only the latest
+  releases and promises no compatibility before 1.0; the check comes with 1.0, with its entry in
+  `docs/decisions.md`.
 
 ## Requests to tscomfy
 
