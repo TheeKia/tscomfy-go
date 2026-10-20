@@ -623,7 +623,8 @@ const (
   4. Posts `{prompt, client_id, prompt_id, extra_data, front?, partial_execution_targets?}` to
      `/prompt`.
 - **Answers:**
-  - 200 returns the `*Job`. Its `node_errors`, when any (a partial acceptance: the server runs the
+  - 200 returns the `*Job`, whatever the body: a body that isn't JSON or has another shape only
+    loses its detail. Its `node_errors`, when any (a partial acceptance: the server runs the
     outputs that validated), become the result's `NodeErrors` (§7.8).
   - 400 returns a `*RejectedError` and no job.
   - A 200 whose `prompt_id` isn't the minted one (a proxy that ignores it) cancels the job under
@@ -644,8 +645,8 @@ func (c *Client) Run(ctx context.Context, prompt Prompt, opts *SubmitOptions) (*
 ```
 
 `Submit` then `Wait`. `ctx` governs the job, as in `exec.CommandContext`: when it ends before the
-job, `Run` cancels the job on the server (best effort, bounded by a timeout **(settle in Phase
-2)**) and returns `context.Cause(ctx)`.
+job, `Run` cancels the job on the server (best effort, within 10 s) and returns
+`context.Cause(ctx)`.
 
 ### 7.6 Job
 
@@ -666,7 +667,11 @@ func (j *Job) Events(ctx context.Context) iter.Seq[Event] // §7.7
   | was cancelled or interrupted, by anyone | yes, outputs so far | `ErrCancelled` |
   | lost its record, and wasn't known to be cancelled (§8, rule 4) | nil | `ErrJobLost` |
   | still running when `ctx` ended | nil | `context.Cause(ctx)` |
-  | unknown: client closed, server unreachable after the reconnect budget | nil | `ErrClosed`, a transport error |
+  | unknown: client closed, socket down through the reconnect budget | nil | `ErrClosed`, a transport error |
+  | unknown: its record answered in a way the protocol doesn't expect | nil | `*HTTPError`, `*ProtocolError` |
+
+  A record read that fails for a while (a restart, a proxy's 502) doesn't end the job: the next
+  poll reads again (§8, rule 5).
 
   The result is non-nil exactly when the server settled the job.
 - **A job ends exactly once,** in one of the table's rows other than "still running": settled,
@@ -676,8 +681,10 @@ func (j *Job) Events(ctx context.Context) iter.Seq[Event] // §7.7
   `context.Cause(ctx)` without ending the job; a later `Wait` can still get its outcome.
 - **`Cancel`** posts `/api/jobs/{id}/cancel`. The job then settles from its record, normally as
   `ErrCancelled`; one that was finishing may still succeed, since the server's
-  `{"cancelled":true}` only means the interrupt was signalled. Cancelling a settled job does
-  nothing.
+  `{"cancelled":true}` only means the interrupt was signalled. Cancelling a job the server
+  settled does nothing; one that ended otherwise (`ErrClosed`, a transport error) may still run,
+  so the cancel is sent. The job counts as cancelled by this client from before the request, so a
+  404 read meanwhile is this cancel's. After `Close`, `Cancel` returns `ErrClosed`.
 
 ### 7.7 Events
 
@@ -701,15 +708,20 @@ type Event interface{ isEvent() }
   when `ctx` is done. Called again after a `break`, it continues the stream; called after it
   ended, it yields nothing. Iterating from two goroutines at once panics.
 - **No outcome.** It never reports how the job ended; that is `Wait`'s.
-- **Bounded buffer.** While the reader lags, a newer `ProgressEvent` or `PreviewEvent` of a node
-  replaces its unread one in place. `TextEvent`s are capped at a number **(settle in Phase 3)**,
-  the oldest dropped first. The other events are bounded by the prompt's node count. The doc
+- **Bounded buffer.** While the reader lags, a newer `ProgressEvent`, or JPEG `PreviewEvent` (a
+  sampler's preview), of a node replaces its unread one in place. PNG `PreviewEvent`s are
+  `SaveImageWebsocket`'s images, one per image of a batch and nowhere else, so they are all kept,
+  up to 64 unread; at most 256 unread `TextEvent`s are kept (partner nodes send one per status
+  change). Beyond those caps the oldest go first. The other events are bounded by the prompt's node count. The doc
   comment states this.
 - **Node ids** are display ids (`display_node` in `executed`, `display_node_id` in
   `progress_state` and preview metadata), mapped through `executed` for nodes expanded at run
   time (ids such as `"5.0.0.1"`).
 - Unknown message types and fields are ignored, and so are frames about other prompts. Numbers
-  that ComfyUI sends as floats or integers (`value`, `max`) decode as `float64`.
+  that ComfyUI sends as floats or integers (`value`, `max`) decode as `float64`. Everything the
+  server sends decodes with invalid UTF-8 allowed: Python's `json` writes a string it read with
+  `surrogateescape` as a lone surrogate (`"\udc80"`), which becomes U+FFFD instead of a lost
+  message.
 
 ### 7.8 Results and outputs
 
@@ -780,13 +792,17 @@ type File struct {
 }
 ```
 
-- `Upload` streams a multipart `POST /upload/image`. The stored name can differ from `name`:
+- `Upload` streams a multipart `POST /upload/image`. It returns when the request ends or its
+  context does; like `net/http` with a request body, it may leave a goroutine in a `Read` of the
+  caller's reader that hasn't returned yet. The stored name can differ from `name`:
   without `Overwrite`, the server renames a file whose name is taken by different content
   (`name (1).ext`, …) and reuses the name for identical content. The server ignores the part's
   content type, so there is no option for it. A `Type` other than the three `FolderType`
   constants is an error and nothing is sent (ComfyUI answers 500 for one).
 - A backend passes `UploadedFile.Value` to a string parameter (a `LoadImage` `image` input).
-- `Open` streams `GET /view`; the caller closes the file.
+- `Open` streams `GET /view`; the caller closes the file. Its context bounds the download,
+  reading included, as an HTTP request's does.
+- `Close` aborts uploads and downloads in flight; afterwards both return `ErrClosed`.
 - `FileURL` keeps the base URL's query, so a token in it is in the result.
 
 ### 7.10 Errors
@@ -799,7 +815,7 @@ type File struct {
 | `ErrCancelled` | the job was cancelled or interrupted |
 | `*RejectedError{Type, Message, Details string; Node NodeID; NodeErrors []NodeError}` | the server refused the prompt (400); `Node` is set when the top-level error names one (`missing_node_type`) |
 | `*ExecutionError{Node NodeID; ClassType, ExceptionType, Message string; Traceback []string; Executed []NodeID}` | a node raised an exception |
-| `*HTTPError{Op string; StatusCode int; Body []byte}` | an answer the protocol doesn't expect; `Body` truncated **(settle in Phase 2)** |
+| `*HTTPError{Op string; StatusCode int; Body []byte}` | an answer the protocol doesn't expect; `Body` is the first 4 KiB |
 | `*ProtocolError` | the server broke the protocol |
 
 Network errors are wrapped with `%w`, so `errors.Is` and `errors.As` work.
@@ -819,9 +835,21 @@ delays, a refused handshake, large binary frames, events before the POST's answe
   of fake time at once).
 - **Leak checks come with it.** `synctest.Test` fails when a goroutine of the bubble is still
   blocked at the end ("blocked goroutines remain", verified), so every client test checks that
-  `Close` stopped everything, with no helper library.
-- **Internal** until its API is settled; making it public, for users to test their backends with,
-  is decided in Phase 7.
+  `Close` stopped everything, with no helper library. The fake's own `Close` shuts its HTTP
+  server down gracefully, since `net/http` lingers 500 ms over a connection after an error
+  answer.
+- **Writes are queued.** A socket's messages go through a queue that a writer goroutine drains,
+  as a real server's do: over an unbuffered pipe, the server writing its first status while the
+  client writes its feature flags would otherwise deadlock.
+- **Faults:** `Behavior` per run (events before the answer, a drop before an event, the same-id
+  hazard, a server that forgets the job, holding until a cancel, a queued job, a hang, gaps, a
+  slow answer), and on the server: `DropSockets`, `Silence` (the server's side of the
+  connections stops reading and swallows writes, so pings go unanswered: a socket dead behind a
+  proxy), `RefuseSockets`, `BreakRecordReads`, `Options.PathPrefix`, `Options.Version`,
+  `Options.NoFeatureFlags`.
+- **Internal in v0.1** (decided in Phase 7): its fault controls follow this project's tests and
+  would freeze as API. Making it public later adds API and breaks nothing; a backend's own tests
+  can meanwhile run its handlers against an `httptest` server of their own.
 
 ## 8. Protocol rules
 
@@ -847,7 +875,11 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
    - 404: a job cancelled while pending leaves no record and sends no event, and a server restart
      empties the queue and loses running jobs. The client can't tell these apart after a socket
      drop, so a 404 is `ErrCancelled` when this client cancelled the job, or when the job never
-     started (rule 14) and its socket never dropped; any other 404 is `ErrJobLost`.
+     started (rule 14) and its socket never dropped; any other 404 is `ErrJobLost`. ComfyUI's 404
+     is JSON (`{"error":"Job not found"}`); one that isn't comes from something else, a proxy that
+     doesn't route the job API, and is an `*HTTPError`;
+   - 429 or 5xx, or no answer after the retries below: read again at the next poll;
+   - any other answer: an `*HTTPError`.
 5. **Reading the record at other times:**
    - **Jobs that haven't started:** on a `status` message, at most once a second (a change inside
      the second is read at its end), the client reads `GET /api/jobs?status=pending,in_progress`
@@ -859,11 +891,11 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
    - after `Cancel`.
 
    A record read that can't reach the server is retried after 0.5, 1, 2, 4 and 8 s, then once
-   more. Each read has its own timeout **(settle in Phase 2)**, so one hung request can't stall
-   settling. Ported from tscomfy, except the list read, which replaces its per-job reads on
+   more. Each read has its own 10 s timeout, so one hung request can't stall settling. (Go's
+   `http.Transport` may also retry a GET by itself on a reused connection that drops.) Ported from tscomfy, except the list read, which replaces its per-job reads on
    `status`.
 6. **Reconnecting** (ported from tscomfy):
-   - only while jobs are open;
+   - only while jobs are open: the loop stops at its next attempt once none is;
    - after 0.25, 0.5, 1, 2, 4, 8, 15, 30, 30, 30 s, each scaled by a random factor in [0.5, 1)
      (about two minutes in all);
    - **a fresh client id for every socket.** When the server closes an old socket late, it
@@ -890,12 +922,14 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
     origin check passes.
 12. **The read limit.** coder/websocket closes a connection on a message over 32 KiB by default
     (`read.go:91`). Previews and `SaveImageWebsocket` images are larger. The client raises the
-    limit to a value **(settle in Phase 2)**, tested with a large frame.
+    limit to 128 MiB, a full-size PNG of any image a GPU makes today; a test sends an 8 MiB frame.
 13. **Pings.** ComfyUI answers websocket pings (aiohttp's autoping) but never sends any. A socket
     that dies without closing (a proxy's idle timeout) would cost every later job its events
     until the 30 s record read. The client pings while jobs are open, and before a `Submit` on a
-    socket that has been idle; a failed ping drops the socket and starts rule 6. Interval,
-    timeout and idle threshold **(settle in Phase 4)**.
+    socket that has been idle; a failed ping drops the socket and starts rule 6. It pings every
+    30 s while jobs are open, with a 10 s timeout, and before a `Submit` on a socket that has
+    received nothing for 30 s. A silent socket is so found within 40 s, sooner than the 30 s
+    record poll would settle a job, and a `Submit` never posts on a dead one.
 14. **"Started"** comes from `execution_start` or `execution_cached` for the job, or from a record
     that says `in_progress`.
 
@@ -947,12 +981,6 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
 
 ## 10. Open values
 
-| Value | Section | Settled in |
-|---|---|---|
-| `Run`'s cancel timeout | §7.5 | Phase 2 |
-| `HTTPError.Body` truncation | §7.10 | Phase 2 |
-| The record read timeout | §8, rule 5 | Phase 2 |
-| The websocket read limit | §8, rule 12 | Phase 2 |
-| The `TextEvent` cap | §7.7 | Phase 3 |
-| Ping interval, timeout and idle threshold | §8, rule 13 | Phase 4 |
-| `comfytest` made public or kept internal | §7.11 | Phase 7 |
+None. Settled: `Run`'s cancel timeout (10 s, §7.5), `HTTPError.Body` (4 KiB, §7.10), the record read
+timeout (10 s, rule 5), the read limit (128 MiB, rule 12), the `TextEvent` cap (256, §7.7), the
+pings (30 s, 10 s, 30 s idle, rule 13), `comfytest` internal in v0.1 (§7.11).

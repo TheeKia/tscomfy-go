@@ -69,6 +69,8 @@ linters:
         - fmt.Fprint # writes of messages to stderr or a buffer; a failure is not actionable
         - fmt.Fprintf
         - fmt.Fprintln
+        - (io.Closer).Close # closing what was read; the reading reported any failure
+        - (io.ReadCloser).Close
     exhaustive:
       default-signifies-exhaustive: true
     gocritic:
@@ -87,6 +89,10 @@ linters:
         - G304
         - G306
         - G703
+        # Jitter for reconnect waits needs no cryptographic randomness.
+        - G404
+        # Lengths and counts converted between integer types are bounded by the data they measure.
+        - G115
     govet:
       enable-all: true
       disable:
@@ -127,6 +133,14 @@ linters:
 
   exclusions:
     generated: strict
+    rules:
+      # The fake server is test code: it parses its own client's forms and echoes ids.
+      - path: internal/comfytest/
+        linters: [gosec]
+      # Tests and examples close clients and bodies with defer, as callers do.
+      - path: _test\.go
+        text: "Error return value of `.*Close` is not checked"
+        linters: [errcheck]
 
 issues:
   max-issues-per-linter: 0

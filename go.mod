@@ -6,3 +6,5 @@ go 1.27
 ignore node_modules
 
 tool github.com/TheeKia/tscomfy-go/cmd/tscomfy-go
+
+require github.com/coder/websocket v1.8.15
