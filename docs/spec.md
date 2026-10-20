@@ -446,8 +446,9 @@ type Txt2Img struct {
 	Checkpoint *string // checkpoint.ckpt_name, default "model-a.safetensors"
 }
 
-// Build returns the txt2img prompt with p's values. It reports values outside
-// an input's bounds as a *workflow.ParamError; the server validates the rest.
+// Build returns the txt2img prompt with p's values. It reports a value outside its
+// input's bounds, a float that isn't finite or a string that isn't valid UTF-8
+// as a *workflow.ParamError; the server validates the rest.
 func (p Txt2Img) Build() (comfy.Prompt, error) {
 	return txt2ImgTemplate.Fill(p.Prompt, p.Seed, p.Negative, p.Steps, p.Width, p.Height, p.Checkpoint)
 }

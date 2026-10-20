@@ -36,7 +36,7 @@ type Behavior struct {
 	ForgetBefore int
 	// HoldUntilCancel waits for a cancel request before the first execution_interrupted.
 	HoldUntilCancel bool
-	// Queued plays nothing until Start: the job waits in the queue. A cancel removes it (404).
+	// Queued plays nothing: the job waits in the queue until a cancel removes it (404).
 	Queued bool
 	// HangBefore stops before event number HangBefore, counting from 1, and never finishes: a
 	// dead worker. 0: never.
@@ -220,16 +220,6 @@ func (s *Server) Expect(run Run, behavior Behavior) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.runs = append(s.runs, expected{run: run, behavior: behavior})
-}
-
-// Start releases a job that Behavior.Queued holds.
-func (s *Server) Start(id string) {
-	s.mu.Lock()
-	j := s.jobs[id]
-	s.mu.Unlock()
-	if j != nil {
-		j.free()
-	}
 }
 
 // JobIDs returns the prompt ids the server queued, in order.
