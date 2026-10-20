@@ -58,4 +58,6 @@ previews.
 
 `res.Files(workflows.Txt2ImgSave)` lists a node's files; `client.Open(ctx, file.FileRef)` streams
 one; `client.FileURL(ref)` is its `/view` URL. `res.Output(node)` has a node's text and raw UI
-output, with the server's metadata (sizes, `animated`).
+output, with the server's metadata (sizes, `animated`). A node inside a loop (`StartLoop`) runs
+once per iteration: `Files` lists every iteration's files in order, `Output` is the last run's,
+and `res.All()` yields each run.

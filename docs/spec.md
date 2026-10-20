@@ -712,8 +712,10 @@ type Event interface{ isEvent() }
   sampler's preview), of a node replaces its unread one in place. PNG `PreviewEvent`s are
   `SaveImageWebsocket`'s images, one per image of a batch and nowhere else, so they are all kept,
   up to 64 unread; at most 256 unread `TextEvent`s are kept (partner nodes send one per status
-  change). Beyond those caps the oldest go first. The other events are bounded by the prompt's node count. The doc
-  comment states this.
+  change). Beyond those caps the oldest go first. The other events come at most once per node the
+  server runs: the prompt's, plus a copy of a loop's body per iteration (ComfyUI 0.42's
+  `StartLoop`, which sets no limit on iterations; a 100-iteration loop of a 4-node prompt sent 403
+  `executing` messages, measured 2026-10-20). The doc comment states this.
 - **Node ids** are display ids (`display_node` in `executed`, `display_node_id` in
   `progress_state` and preview metadata), mapped through `executed` for nodes expanded at run
   time (ids such as `"5.0.0.1"`).
@@ -726,11 +728,11 @@ type Event interface{ isEvent() }
 ### 7.8 Results and outputs
 
 ```go
-func (r *Result) Files(nodes ...NodeID) []OutputFile // in prompt order; every node's when none are given
-func (r *Result) Output(node NodeID) (NodeOutput, bool)
-func (r *Result) All() iter.Seq[NodeOutput]           // prompt order
-func (r *Result) NodeErrors() []NodeError             // outputs the server skipped (partial acceptance)
-func (r *Result) Blocked() []BlockedEvent             // nodes an ExecutionBlocker stopped, as seen live
+func (r *Result) Files(nodes ...NodeID) []OutputFile    // in prompt order; every node's when none are given
+func (r *Result) Output(node NodeID) (NodeOutput, bool) // the last, for a node that ran more than once
+func (r *Result) All() iter.Seq[NodeOutput]             // prompt order, one per run
+func (r *Result) NodeErrors() []NodeError               // outputs the server skipped (partial acceptance)
+func (r *Result) Blocked() []BlockedEvent               // nodes an ExecutionBlocker stopped, as seen live
 
 type NodeOutput struct {
 	Node  NodeID
@@ -760,6 +762,13 @@ type FolderType string // FolderOutput "output", FolderTemp "temp", FolderInput 
 
 - **Outputs** come from the job record, except a node's output seen live in `executed`, which wins:
   the record rewrites some entries (research §5 in tscomfy).
+- **One output per node the server ran.** Nodes expanded at run time can share a displayed id:
+  `StartLoop` runs a copy of its body per iteration (`start.0.0.0_save`, `start.0.0.1_save`, …),
+  each displayed as the original node, and the record lists each copy's output under its own id
+  (`execution.py` builds `outputs` by `unique_id`). The result keeps them all, in the order they
+  ran (the record's member order, which is ComfyUI's), so `Files(node)` has every iteration's
+  files; `Output(node)` returns the last. A copy whose `executed` was missed (a socket drop) keeps
+  the server's id, and comes after the prompt's nodes.
 - **Files** are recognized by shape under any key: an object with a non-empty `filename`, and a
   `type` of `output`, `temp` or `input`. The client doesn't classify them: the generated node
   constant says which node made a file, and the server's own `metadata` (`kind`, `width`,

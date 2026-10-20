@@ -188,6 +188,80 @@ func TestNodesExpandedAtRunTimeAreShownAsTheirNode(t *testing.T) {
 	})
 }
 
+// loopRun is a loop of three iterations as ComfyUI 0.42's StartLoop expands it: each iteration
+// runs its own copy of the save node, displayed as "save". The ids' byte order (0, 10, 2) isn't
+// their execution order (0, 2, 10).
+func loopRun(live bool) comfytest.Run {
+	r := comfytest.Run{
+		Prompt: jsontext.Value(`{"start":{"class_type":"StartLoop","inputs":{}},"save":{"class_type":"SaveImage","inputs":{}},"end":{"class_type":"EndLoop","inputs":{}}}`),
+		Answer: comfytest.Exchange{Status: http.StatusOK, Body: jsontext.Value(`{"prompt_id":"PROMPT_ID","number":1,"node_errors":{}}`)},
+		Events: []jsontext.Value{jsontext.Value(`{"type":"execution_start","data":{"prompt_id":"PROMPT_ID"}}`)},
+	}
+	var outputs []string
+	for i, iteration := range []string{"0", "2", "10"} {
+		id := "start.0.0." + iteration + "_save"
+		output := `{"images":[{"filename":"` + string(rune('a'+i)) + `.png","subfolder":"","type":"output"}]}`
+		if live {
+			r.Events = append(r.Events, jsontext.Value(`{"type":"executed","data":{"node":"`+id+`","display_node":"save","output":`+output+`,"prompt_id":"PROMPT_ID"}}`))
+		}
+		outputs = append(outputs, `"`+id+`":`+output)
+	}
+	r.Events = append(r.Events, jsontext.Value(`{"type":"executing","data":{"node":null,"prompt_id":"PROMPT_ID"}}`))
+	r.Record = &comfytest.Exchange{Status: http.StatusOK, Body: jsontext.Value(`{"id":"PROMPT_ID","status":"completed","outputs":{` + strings.Join(outputs, ",") + `}}`)}
+	return r
+}
+
+func filenames(files []comfy.OutputFile) []string {
+	names := make([]string, len(files))
+	for i, f := range files {
+		names[i] = f.Filename
+	}
+	return names
+}
+
+func TestEveryIterationOfALoopKeepsItsOutput(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv, c := fake(t)
+		r := loopRun(true)
+		srv.Expect(r, comfytest.Behavior{})
+		res, err := submit(t, c, r, nil).Wait(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := filenames(res.Files("save")); !slices.Equal(got, []string{"a.png", "b.png", "c.png"}) {
+			t.Errorf("Files(save) = %v, want every iteration's, in execution order", got)
+		}
+		if out, ok := res.Output("save"); !ok || !slices.Equal(filenames(out.Files), []string{"c.png"}) {
+			t.Errorf("Output(save) = %+v, %v; want the last iteration's", out, ok)
+		}
+		var all int
+		for out := range res.All() {
+			if out.Node != "save" {
+				t.Errorf("All yields node %q", out.Node)
+			}
+			all++
+		}
+		if all != 3 {
+			t.Errorf("All yields %d outputs, want 3", all)
+		}
+	})
+}
+
+func TestALoopsOutputsMissedLiveKeepTheRecordsOrder(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv, c := fake(t)
+		r := loopRun(false) // the executed messages went to a socket that dropped
+		srv.Expect(r, comfytest.Behavior{})
+		res, err := submit(t, c, r, nil).Wait(t.Context())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := filenames(res.Files()); !slices.Equal(got, []string{"a.png", "b.png", "c.png"}) {
+			t.Errorf("Files() = %v, want the record's order", got)
+		}
+	})
+}
+
 func TestSaveImageWebsocketImagesAreAllKept(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		srv, c := fake(t)

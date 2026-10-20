@@ -6,10 +6,12 @@ import (
 	"encoding/json/v2"
 	"iter"
 	"slices"
+	"strings"
 )
 
 // Result is what a settled job produced: each node's output, in prompt order, and what the
-// server reported besides.
+// server reported besides. A node the server ran more than once, such as the body of a loop, has
+// one output per run, in the order they ran.
 type Result struct {
 	outputs    []NodeOutput
 	nodeErrors []NodeError
@@ -28,9 +30,10 @@ func (r *Result) Files(nodes ...NodeID) []OutputFile {
 	return files
 }
 
-// Output returns a node's output, and whether it reported one.
+// Output returns a node's output, and whether it reported one: the last, for a node that ran more
+// than once. All has every run's.
 func (r *Result) Output(node NodeID) (NodeOutput, bool) {
-	for _, out := range r.outputs {
+	for _, out := range slices.Backward(r.outputs) {
 		if out.Node == node {
 			return out, true
 		}
@@ -38,7 +41,7 @@ func (r *Result) Output(node NodeID) (NodeOutput, bool) {
 	return NodeOutput{}, false
 }
 
-// All yields every node's output, in prompt order.
+// All yields every node's output, in prompt order: one per run of a node that ran more than once.
 func (r *Result) All() iter.Seq[NodeOutput] {
 	return slices.Values(r.outputs)
 }
@@ -216,6 +219,15 @@ func rejected(body jsontext.Value, position map[NodeID]int) error {
 // compareNodes compares two node ids by their position in the prompt; unknown ones come last,
 // in byte order.
 func compareNodes(position map[NodeID]int, a, b NodeID) int {
+	if c := comparePositions(position, a, b); c != 0 {
+		return c
+	}
+	return strings.Compare(string(a), string(b))
+}
+
+// comparePositions compares two node ids by their position in the prompt; unknown ones come last
+// and compare equal.
+func comparePositions(position map[NodeID]int, a, b NodeID) int {
 	pa, oka := position[a]
 	pb, okb := position[b]
 	switch {
@@ -224,10 +236,6 @@ func compareNodes(position map[NodeID]int, a, b NodeID) int {
 	case oka:
 		return -1
 	case okb:
-		return 1
-	case a < b:
-		return -1
-	case a > b:
 		return 1
 	default:
 		return 0

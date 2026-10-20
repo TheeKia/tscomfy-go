@@ -329,7 +329,10 @@ func (j *Job) executed(data jsontext.Value) {
 	j.mu.Lock()
 	j.display[m.Node] = display
 	if ok {
-		j.live[display] = out
+		if _, seen := j.live[m.Node]; !seen {
+			j.liveOrder = append(j.liveOrder, m.Node)
+		}
+		j.live[m.Node] = out
 	}
 	j.mu.Unlock()
 	if ok {

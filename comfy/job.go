@@ -75,7 +75,8 @@ type Job struct {
 	reconnects int  // reconnects since the job began, for its poll schedule
 	nodeErrors []NodeError
 	blocked    []BlockedEvent
-	live       map[NodeID]NodeOutput // outputs seen in executed messages
+	live       map[string]NodeOutput // outputs seen in executed messages, by server node id
+	liveOrder  []string              // the server node ids of live, in the order they ran
 	display    map[string]NodeID     // the node each server node id is displayed as
 	progress   map[NodeID][2]float64
 }
@@ -225,8 +226,8 @@ func (j *Job) Cancel(ctx context.Context) error {
 // The events never say how the job ended; that is Wait's. While the reader lags, a newer
 // ProgressEvent, or sampler's JPEG PreviewEvent, of a node replaces its unread one where it
 // stands; of TextEvents and SaveImageWebsocket's PNG PreviewEvents at most 256 and 64 are kept,
-// the oldest dropped first. The other events come once or once per node, so the buffer stays
-// bounded.
+// the oldest dropped first. The other events come at most once per node the server runs, so the
+// buffer grows with the run, not with the wait: a loop's body runs once per iteration.
 func (j *Job) Events(ctx context.Context) iter.Seq[Event] {
 	return j.events.seq(ctx)
 }
@@ -243,7 +244,7 @@ func (c *Client) newJob(order []NodeID) *Job {
 		position: position,
 		done:     make(chan struct{}),
 		wakeCh:   make(chan struct{}, 1),
-		live:     map[NodeID]NodeOutput{},
+		live:     map[string]NodeOutput{},
 		display:  map[string]NodeID{},
 		progress: map[NodeID][2]float64{},
 	}
@@ -529,9 +530,9 @@ func (j *Job) end(res *Result, err error) {
 
 // record is a job record, GET /api/jobs/{id}.
 type record struct {
-	Status         string                    `json:"status"`
-	Outputs        map[string]jsontext.Value `json:"outputs"`
-	ExecutionError *recordError              `json:"execution_error"`
+	Status         string         `json:"status"`
+	Outputs        jsontext.Value `json:"outputs"` // by server node id, in the order they ran
+	ExecutionError *recordError   `json:"execution_error"`
 }
 
 type recordError struct {
@@ -645,23 +646,26 @@ func nodeIDs(ids []string) []NodeID {
 	return out
 }
 
-// recordResult is the result from a record's outputs, a node's live output winning: the record
-// rewrites some entries (rule 4 and §7.8).
+// recordResult is the result from a record's outputs, in the order the nodes ran, a node's live
+// output winning: the record rewrites some entries (rule 4 and §7.8). A loop's iterations each
+// have an output of their own, displayed as the same node.
 func (j *Job) recordResult(r record) *Result {
+	var byID map[string]jsontext.Value
+	_ = json.Unmarshal(r.Outputs, &byID, lenient) // outputs of another shape are none
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	outputs := map[NodeID]NodeOutput{}
-	for id, ui := range r.Outputs {
+	var outputs []NodeOutput
+	for _, id := range objectKeys(r.Outputs) {
+		if live, ok := j.live[id]; ok {
+			outputs = append(outputs, live)
+			continue
+		}
 		node, ok := j.display[id]
 		if !ok {
 			node = NodeID(id)
 		}
-		if live, ok := j.live[node]; ok {
-			outputs[node] = live
-			continue
-		}
-		if out, ok := parseNodeOutput(node, ui); ok {
-			outputs[node] = out
+		if out, ok := parseNodeOutput(node, byID[id]); ok {
+			outputs = append(outputs, out)
 		}
 	}
 	return j.newResult(outputs)
@@ -671,17 +675,18 @@ func (j *Job) recordResult(r record) *Result {
 func (j *Job) liveResult() *Result {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	return j.newResult(j.live)
+	outputs := make([]NodeOutput, len(j.liveOrder))
+	for i, id := range j.liveOrder {
+		outputs[i] = j.live[id]
+	}
+	return j.newResult(outputs)
 }
 
-// newResult orders outputs as the prompt does, unknown nodes last; j.mu is held.
-func (j *Job) newResult(outputs map[NodeID]NodeOutput) *Result {
-	res := &Result{nodeErrors: slices.Clone(j.nodeErrors), blocked: slices.Clone(j.blocked)}
-	for _, out := range outputs {
-		res.outputs = append(res.outputs, out)
-	}
-	slices.SortFunc(res.outputs, func(a, b NodeOutput) int { return compareNodes(j.position, a.Node, b.Node) })
-	return res
+// newResult orders outputs as the prompt does, keeping the order they ran within a node and among
+// nodes the prompt doesn't have, which come last; j.mu is held.
+func (j *Job) newResult(outputs []NodeOutput) *Result {
+	slices.SortStableFunc(outputs, func(a, b NodeOutput) int { return comparePositions(j.position, a.Node, b.Node) })
+	return &Result{outputs: outputs, nodeErrors: slices.Clone(j.nodeErrors), blocked: slices.Clone(j.blocked)}
 }
 
 // cancelOnClose cancels a request's context when its body is closed.
