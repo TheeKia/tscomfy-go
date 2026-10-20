@@ -1,6 +1,6 @@
 {
   "name": "@tscomfy/go",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Write ComfyUI workflows in TypeScript with tscomfy and run them from Go: template, param, and the export that tscomfy-go's generator runs.",
   "keywords": [
     "comfyui",

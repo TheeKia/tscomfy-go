@@ -162,7 +162,11 @@ Against the owner's local ComfyUI, with model-free prompts, opt-in (`TSCOMFY_GO_
   checks the tag against `ts/package.json`, runs the gate, packs `@tscomfy/go`, installs the
   tarball in a fresh project and runs the generator on it, then publishes with npm trusted
   publishing. **Remaining, the owner's:** the trusted publisher for `@tscomfy/go` on npm (it names
-  this repository and `release.yml`), then the version bump to 0.1.0 and the tag.
+  this repository and `release.yml`), then the tag. npm adds a trusted publisher only to a package
+  that exists (`npm trust` answers 404 otherwise, tried 2026-10-20), so 0.1.0 is the one version
+  published by hand, as tscomfy's first release was: the tarball `bun pm pack` made after a green
+  gate, checked as `release.yml` checks it. The `v0.1.0` run of `release.yml` then finds 0.1.0 on
+  npm and skips it; every later version comes from CI, with provenance.
 - API compatibility checks (`apidiff`): **not for 0.x.** The project supports only the latest
   releases and promises no compatibility before 1.0; the check comes with 1.0, with its entry in
   `docs/decisions.md`.
