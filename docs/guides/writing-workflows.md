@@ -33,8 +33,8 @@ doesn't have is a `*comfy.RejectedError` naming the node and input).
 
 ## When `template` refuses
 
-`template` builds the workflow when the module loads and throws a `TemplateError` naming the
-template and the parameter, so mistakes show in your editor's test run, in `bun test`, and in
+`template` builds the workflow when the module loads and throws a `TemplateError` (exported by
+`@tscomfy/go`) naming the template and the parameter, so mistakes show in your editor's test run, in `bun test`, and in
 `go generate`. tscomfy's own validation errors come with their `ValidationError` as the cause.
 
 ## Graphs that change shape

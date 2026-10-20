@@ -42,8 +42,10 @@ export type TemplateDocument = {
 };
 
 /**
- * A template or export that breaks a rule of docs/spec.md §3.5 or §3.6. The export command
- * prints its message alone; any other error comes with its stack.
+ * What {@link template} throws for a workflow that can't be a template, naming the template and
+ * the parameter: tscomfy's validation failed (its `ValidationError` is the `cause`), or a name or
+ * a parameter breaks a rule. The export command prints its message alone; any other error comes
+ * with its stack.
  */
 export class TemplateError extends Error {
   override readonly name = "TemplateError";

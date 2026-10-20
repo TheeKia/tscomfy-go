@@ -19,6 +19,8 @@ import {
 } from "@tscomfy/core";
 import { checkTemplateName, nodeIdOf, register, templateDocument } from "./document.ts";
 
+export { TemplateError } from "./document.ts";
+
 /** A workflow that tscomfy-go's generator turns into Go: its name and the tscomfy workflow. */
 export interface Template<N = unknown> {
   /** Names the generated files (`<name>.json`, `<name>.go`) and the Go type. */
@@ -45,9 +47,9 @@ export interface ParamOptions {
  * `build` returns the parameters, made by {@link param}, under their names, in the order Go's
  * struct fields follow.
  *
- * `name` matches `^[a-z][a-z0-9_]*$` and parameter names `^[A-Za-z][A-Za-z0-9_]*$`. Throws when
- * tscomfy's validation fails (`cause` is its `ValidationError`) and when a parameter can't be
- * one: its node isn't in the prompt, its input isn't one of its class's inputs, holds a link or
+ * `name` matches `^[a-z][a-z0-9_]*$` and parameter names `^[A-Za-z][A-Za-z0-9_]*$`. Throws a
+ * {@link TemplateError} when tscomfy's validation fails (`cause` is its `ValidationError`) and
+ * when a parameter can't be one: its node isn't in the prompt, its input isn't one of its class's inputs, holds a link or
  * has no value, is not an int, float, string, boolean or single-select string combo, or another
  * parameter names it too.
  */

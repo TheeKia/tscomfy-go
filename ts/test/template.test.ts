@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { ValidationError, type BuildContext } from "@tscomfy/core";
-import { param, type Param, template } from "@tscomfy/go";
-import { documentOf, TemplateError } from "../src/document.ts";
+import { param, type Param, template, TemplateError } from "@tscomfy/go";
+import { documentOf } from "../src/document.ts";
 import { basicPipeline } from "./comfy/basic-pipeline/index.ts";
 import type { Nodes as BasicNodes } from "./comfy/basic-pipeline/nodes.ts";
 import { params } from "./comfy/params/index.ts";

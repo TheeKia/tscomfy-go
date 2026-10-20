@@ -160,6 +160,7 @@ export function template<N>(
   build: (context: BuildContext<N>) => Readonly<Record<string, Param>>,
 ): Template<N>;
 export function param(node: NodeHandle | Out<string>, input: string, options?: ParamOptions): Param;
+export class TemplateError extends Error {} // what template throws (§3.6)
 ```
 
 Templates are plain data built eagerly at import (tscomfy's `workflow` calls `build` at once),
@@ -273,7 +274,8 @@ parameter when:
 - a string anywhere in the prompt isn't well-formed Unicode (a lone surrogate, which no Go string
   can hold).
 
-The error is a `TemplateError`. The export command prints its message alone and any other error
+The error is a `TemplateError`, exported for tests of the workflows (`toThrow(TemplateError)`),
+as tscomfy exports its `ValidationError`. The export command prints its message alone and any other error
 with its stack, so a bug in the workflows' own code shows where it is. The generator checks each
 template once more as `workflow.Load` does (§6.2), bounds included.
 
