@@ -3,8 +3,8 @@
 Run ComfyUI workflows from a Go backend, with the workflows written in TypeScript with
 [tscomfy](https://github.com/TheeKia/tscomfy). Supports the latest ComfyUI (0.42).
 
-> **Status: before v0.1.0.** Everything below works and is tested, against a real ComfyUI too;
-> nothing is published yet. Start with the [guides](docs/guides/getting-started.md). The design is in
+> **Status: v0.1.0.** `go get -tool github.com/TheeKia/tscomfy-go/cmd/tscomfy-go` and
+> `bun add @tscomfy/go`; start with the [guides](docs/guides/getting-started.md). The design is in
 > [`docs/spec.md`](docs/spec.md), the decisions behind it in [`docs/decisions.md`](docs/decisions.md),
 > and the roadmap in [`docs/plan.md`](docs/plan.md).
 

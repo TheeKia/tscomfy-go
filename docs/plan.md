@@ -16,7 +16,7 @@ commit; this file only tracks the work.
 | 4. Robustness | Done 2026-10-20 |
 | 5. Files | Done 2026-10-20 |
 | 6. Live tests | Done 2026-10-20: all pass against the owner's ComfyUI 0.42 |
-| 7. Release | In progress: guides, example and `release.yml` done; the owner's npm setup and v0.1.0 remain |
+| 7. Release | Done 2026-10-20: v0.1.0 released (Go module and `@tscomfy/go`) |
 
 ## Rules for every phase
 
@@ -166,7 +166,11 @@ Against the owner's local ComfyUI, with model-free prompts, opt-in (`TSCOMFY_GO_
   that exists (`npm trust` answers 404 otherwise, tried 2026-10-20), so 0.1.0 is the one version
   published by hand, as tscomfy's first release was: the tarball `bun pm pack` made after a green
   gate, checked as `release.yml` checks it. The `v0.1.0` run of `release.yml` then finds 0.1.0 on
-  npm and skips it; every later version comes from CI, with provenance.
+  npm and skips it; every later version comes from CI, with provenance. **Released 2026-10-20:**
+  0.1.0 published by hand (its shasum, `843128f1…`, equals the local pack), the trusted
+  publisher set, and the `v0.1.0` run of `release.yml` (39348091120) passed: the gate, the pack,
+  the install check, and a publish job that skipped the version already on npm. The module proxy
+  serves `github.com/TheeKia/tscomfy-go v0.1.0`.
 - API compatibility checks (`apidiff`): **not for 0.x.** The project supports only the latest
   releases and promises no compatibility before 1.0; the check comes with 1.0, with its entry in
   `docs/decisions.md`.

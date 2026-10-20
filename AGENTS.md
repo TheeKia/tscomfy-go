@@ -22,9 +22,9 @@ request were measured and rejected (D1); don't re-propose them.
 **No backward compatibility.** Only the latest releases are supported: ComfyUI 0.42, Go 1.27,
 tscomfy 0.2, Bun 1.4, TypeScript 7 (spec §1.2). Don't write code for older versions.
 
-**Status:** Phases 0 to 6 are done: templates, the client, and live tests that pass against the
-owner's ComfyUI 0.42. Phase 7 (release) waits on the owner's npm setup and the v0.1.0 tag. The
-plan's status table is kept current as phases close.
+**Status:** v0.1.0 is released: the Go module and `@tscomfy/go` on npm. Every phase of the plan
+is done. Releases come from CI on a `v<version>` tag; bump `ts/package.json` first. The plan's
+status table is kept current.
 
 ## Where things are
 
@@ -157,8 +157,8 @@ govulncheck (through mise), gopls, make. Check for newer stable versions before 
 
 - **Git:** the repository's default branch is `main`; its remote is
   `github.com/TheeKia/tscomfy-go`.
-- **npm:** publishing `@tscomfy/go` needs a trusted publisher on npm for this repository's
-  `release.yml`, which the owner sets up (Phase 7).
+- **npm:** `@tscomfy/go` has a trusted publisher for this repository's `release.yml`; no npm
+  token exists anywhere.
 - **ComfyUI's source** is at `~/ai-tools/ComfyUI` (a git checkout of 0.42), readable as a
   specification only.
 
