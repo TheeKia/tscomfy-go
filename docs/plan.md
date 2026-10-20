@@ -210,3 +210,7 @@ tscomfy is not changed from this repository.
   - One list read replaced per-job reads for jobs that haven't started; the 404 rule was settled.
   - `comfytest` starts internal; the npm API report and `apidiff` were dropped for now.
   - The six ADRs became `docs/decisions.md`.
+- **2026-10-20, audit:** a codebase audit found and fixed a loop's outputs collapsing into one (a
+  result keeps one output per node the server ran), `Upload` blocking after an early answer,
+  cut-off record reads ending jobs, unhelpful generator errors for stray stdout and byte-order
+  marks, and `TemplateError` missing from `@tscomfy/go`'s exports. Version 0.2.0.
