@@ -405,6 +405,8 @@ type ParamError struct {
 - The export command reports its `format` (§3.5). When it isn't the one the generator reads (1),
   the generator stops, changing nothing, and says to install the `@tscomfy/go` version that
   matches the Go module (D4).
+- Anything on stdout besides the export's JSON is the workflows' own output (a `console.log`;
+  `bun init` writes an `index.ts` that logs one): the generator stops and quotes its first line.
 - `go generate` runs the directive in the directory of the file that holds it, so `-workflows`
   and `-out` are relative to that file.
 - It needs no network and no ComfyUI.
@@ -473,7 +475,8 @@ const (
 - `Build`'s comment names what `Fill` refuses: a value outside its input's bounds, a float that
   isn't finite, a string that isn't valid UTF-8.
 - A node id or input name that isn't all printable is quoted in the field comment, so it can't
-  end the comment.
+  end the comment. So is a string default that isn't: a byte-order mark, which JSON leaves
+  unescaped, is legal nowhere in Go source but at its start.
 
 ### 6.3 Types and names
 

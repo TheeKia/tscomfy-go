@@ -208,6 +208,21 @@ func TestFieldCommentsQuoteUnprintableNames(t *testing.T) {
 	}
 }
 
+func TestFieldCommentsEscapeUnprintableDefaults(t *testing.T) {
+	// A byte-order mark is valid in JSON, unescaped, but not in Go source past its start.
+	for _, text := range []string{"a\ufeffb", "\ufeff" + strings.Repeat("x", 45)} {
+		export := exportOf(tmpl("a", `{"name":"x","node":"n","input":"text","kind":"string","optional":true}`,
+			`{"n":{"inputs":{"text":"`+text+`"},"class_type":"X"}}`))
+		files, err := generate("w", export)
+		if err != nil {
+			t.Fatalf("default %q: %v", text, err)
+		}
+		if !strings.Contains(string(files["a.go"]), `\ufeff`) {
+			t.Errorf("default %q: the field comment doesn't escape it:\n%s", text, files["a.go"])
+		}
+	}
+}
+
 func TestGoName(t *testing.T) {
 	tests := map[string]string{
 		"txt2img":         "Txt2Img",

@@ -260,33 +260,52 @@ func fieldComment(p format.Param) string {
 }
 
 // commentValue is a JSON literal as a comment shows it: strings longer than maxCommentDefault
-// runes are cut, with an ellipsis.
+// runes are cut, with an ellipsis, and one that isn't all printable is quoted as Go quotes it, so a
+// byte-order mark, which JSON leaves as is and Go refuses past a file's start, is escaped.
 func commentValue(literal jsontext.Value) string {
 	if literal.Kind() != '"' {
 		return string(literal)
 	}
-	var s string
-	if b, err := jsontext.AppendUnquote(nil, literal); err == nil {
-		s = string(b)
-	}
-	if utf8.RuneCountInString(s) <= maxCommentDefault {
-		return string(literal)
-	}
-	runes := []rune(s)[:maxCommentDefault]
-	quoted, err := jsontext.AppendQuote(nil, string(runes))
+	b, err := jsontext.AppendUnquote(nil, literal)
 	if err != nil {
 		return string(literal)
 	}
-	return string(quoted[:len(quoted)-1]) + `…"`
+	s := string(b)
+	cut := utf8.RuneCountInString(s) > maxCommentDefault
+	if cut {
+		s = string([]rune(s)[:maxCommentDefault])
+	}
+	quoted := string(literal)
+	if cut {
+		q, err := jsontext.AppendQuote(nil, s)
+		if err != nil {
+			return string(literal)
+		}
+		quoted = string(q)
+	}
+	if !printable(quoted) {
+		quoted = strconv.Quote(s)
+	}
+	if cut {
+		quoted = quoted[:len(quoted)-1] + `…"`
+	}
+	return quoted
 }
 
 // commentText is a name as a comment can hold it: as is when it is all printable, quoted
 // otherwise, so a newline in a node id can't end the comment.
 func commentText(s string) string {
+	if printable(s) {
+		return s
+	}
+	return strconv.Quote(s)
+}
+
+func printable(s string) bool {
 	for _, r := range s {
 		if !unicode.IsPrint(r) {
-			return strconv.Quote(s)
+			return false
 		}
 	}
-	return s
+	return true
 }

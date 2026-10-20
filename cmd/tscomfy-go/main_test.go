@@ -89,6 +89,16 @@ func TestRunWritesTheExport(t *testing.T) {
 	}
 }
 
+func TestRunReportsOutputBesidesTheExport(t *testing.T) {
+	// bun init writes an index.ts that logs this; a debug log does the same.
+	fakeBun(t, `echo 'Hello via Bun!'; echo '{"format":1,"templates":[]}'`)
+	out := filepath.Join(t.TempDir(), "workflows")
+	err := run(t.Context(), []string{"-workflows", workflowsDir(t), "-out", out}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), "besides its JSON") || !strings.Contains(err.Error(), `"Hello via Bun!"`) {
+		t.Errorf("run error = %v, want one that names the stray output", err)
+	}
+}
+
 func TestRunReportsTheExportsError(t *testing.T) {
 	fakeBun(t, `echo 'tscomfy-go-export: template "a": the name must match' >&2; exit 1`)
 	out := filepath.Join(t.TempDir(), "workflows")

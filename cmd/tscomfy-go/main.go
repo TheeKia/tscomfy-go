@@ -19,6 +19,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"encoding/json/jsontext"
 	"errors"
 	"flag"
 	"fmt"
@@ -107,6 +108,11 @@ func runExport(ctx context.Context, workflows string) ([]byte, error) {
 			return nil, fmt.Errorf("the export failed: %s", message)
 		}
 		return nil, fmt.Errorf("the export failed: %w", err)
+	}
+	// The export writes one JSON document; anything else on stdout is the workflows' own output.
+	if out := bytes.TrimSpace(stdout.Bytes()); len(out) > 0 && !jsontext.Value(out).IsValid() {
+		line, _, _ := strings.Cut(strings.TrimSpace(stdout.String()), "\n")
+		return nil, fmt.Errorf("the export printed something besides its JSON on stdout, such as a console.log in the workflows: %q", line)
 	}
 	return stdout.Bytes(), nil
 }
