@@ -545,8 +545,8 @@ type recordError struct {
 }
 
 // readRecord reads the job record and settles the job from it (rule 4). A read that can't reach
-// the server, or that a busy or restarting server answers with 429 or 5xx, leaves the job to its
-// next poll: only the reconnect budget ends a job for an unreachable server.
+// the server or is cut off, or that a busy or restarting server answers with 429 or 5xx, leaves
+// the job to its next poll: only the reconnect budget ends a job for an unreachable server.
 func (j *Job) readRecord() {
 	if j.hasEnded() {
 		return
@@ -561,6 +561,10 @@ func (j *Job) readRecord() {
 	case resp.StatusCode == http.StatusNotFound:
 		// ComfyUI's 404 is JSON; another one is a proxy that doesn't route the job API.
 		if _, err := readJSON(resp, op); err != nil {
+			if unreadable(err) {
+				j.c.log.Debug("comfy: reading a job record failed; the next poll reads again", "job", j.id, "error", err)
+				return
+			}
 			j.end(nil, &HTTPError{Op: op, StatusCode: http.StatusNotFound})
 			return
 		}
@@ -582,9 +586,11 @@ func (j *Job) readRecord() {
 	}
 	var r record
 	if err := decodeJSON(resp, op, &r); err != nil {
-		if j.c.life.Err() == nil {
-			j.end(nil, err)
+		if unreadable(err) {
+			j.c.log.Debug("comfy: reading a job record failed; the next poll reads again", "job", j.id, "error", err)
+			return
 		}
+		j.end(nil, err)
 		return
 	}
 	switch r.Status {
@@ -611,6 +617,13 @@ func (j *Job) readRecord() {
 	default:
 		j.end(nil, &ProtocolError{Op: op, Err: fmt.Errorf("unknown job status %q", r.Status)})
 	}
+}
+
+// unreadable reports whether a record read failed in transport, the body cut off or timed out,
+// rather than with an answer of the wrong shape: the next poll reads again (rule 4).
+func unreadable(err error) bool {
+	_, ok := errors.AsType[*ProtocolError](err)
+	return !ok
 }
 
 // fetchRecord sends GET /api/jobs/{id}, each attempt within recordTimeout, retrying one that

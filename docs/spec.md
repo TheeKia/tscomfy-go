@@ -854,8 +854,9 @@ delays, a refused handshake, large binary frames, events before the POST's answe
   hazard, a server that forgets the job, holding until a cancel, a queued job, a hang, gaps, a
   slow answer), and on the server: `DropSockets`, `Silence` (the server's side of the
   connections stops reading and swallows writes, so pings go unanswered: a socket dead behind a
-  proxy), `RefuseSockets`, `BreakRecordReads`, `Options.PathPrefix`, `Options.Version`,
-  `Options.NoFeatureFlags`.
+  proxy), `RefuseSockets`, `BreakRecordReads` (a dropped connection, a body cut off, or a proxy's
+  status), `RefuseUploads` (an answer before the file is all read, as for a file over ComfyUI's
+  size limit), `Options.PathPrefix`, `Options.Version`, `Options.NoFeatureFlags`.
 - **Internal in v0.1** (decided in Phase 7): its fault controls follow this project's tests and
   would freeze as API. Making it public later adds API and breaks nothing; a backend's own tests
   can meanwhile run its handlers against an `httptest` server of their own.
@@ -887,7 +888,8 @@ this project's. All were checked against ComfyUI 0.42's source on 2026-10-20.
      started (rule 14) and its socket never dropped; any other 404 is `ErrJobLost`. ComfyUI's 404
      is JSON (`{"error":"Job not found"}`); one that isn't comes from something else, a proxy that
      doesn't route the job API, and is an `*HTTPError`;
-   - 429 or 5xx, or no answer after the retries below: read again at the next poll;
+   - 429 or 5xx, an answer cut off partway through its body, or no answer after the retries
+     below: read again at the next poll;
    - any other answer: an `*HTTPError`.
 5. **Reading the record at other times:**
    - **Jobs that haven't started:** on a `status` message, at most once a second (a change inside

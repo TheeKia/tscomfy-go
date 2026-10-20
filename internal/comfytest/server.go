@@ -83,7 +83,9 @@ type Server struct {
 	sockets  []string // each handshake's query
 	refuse   bool     // answer handshakes with 403
 	broken   int      // record reads still to break
-	breakAs  int      // how: 0 drops the connection, else this status with a plain body
+	breakAs  int      // how: 0 drops the connection, 200 cuts the body, else this status with a plain body
+	// refuseUpload is the status the next upload is answered with partway through its file; 0: none.
+	refuseUpload int
 }
 
 type expected struct {
@@ -287,17 +289,34 @@ func (s *Server) RefuseSockets(refuse bool) {
 }
 
 // BreakRecordReads makes the next n reads of a job record fail: with status 0 as a dropped
-// connection would, otherwise answered with that status and a plain-text body, as a proxy does.
+// connection would, with http.StatusOK as one dropped partway through the body, otherwise
+// answered with that status and a plain-text body, as a proxy does.
 func (s *Server) BreakRecordReads(n, status int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.broken, s.breakAs = n, status
 }
 
+// RefuseUploads answers the next upload with status partway through its file, once the first of
+// the file's bytes have arrived, and closes the connection, as ComfyUI does when a file passes its
+// size limit (413).
+func (s *Server) RefuseUploads(status int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseUpload = status
+}
+
+// refusingUpload reports whether r is an upload RefuseUploads refuses, without consuming it.
+func (s *Server) refusingUpload(r *http.Request) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.refuseUpload != 0 && strings.HasSuffix(r.URL.Path, "/upload/image")
+}
+
 func (s *Server) log(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var body []byte
-		if r.Method == http.MethodPost {
+		if r.Method == http.MethodPost && !s.refusingUpload(r) {
 			body, _ = io.ReadAll(r.Body)
 			r.Body = io.NopCloser(bytes.NewReader(body))
 		}
@@ -621,7 +640,15 @@ func (s *Server) record(w http.ResponseWriter, r *http.Request) {
 		s.broken--
 		status := s.breakAs
 		s.mu.Unlock()
-		if status != 0 {
+		switch status {
+		case 0:
+		case http.StatusOK:
+			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Length", "1000")
+			w.WriteHeader(status)
+			_, _ = w.Write([]byte(`{"id":"` + id + `","sta`))
+			_ = http.NewResponseController(w).Flush()
+		default:
 			http.Error(w, http.StatusText(status), status)
 			return
 		}
@@ -681,6 +708,33 @@ func (s *Server) view(w http.ResponseWriter, r *http.Request) {
 
 // upload stores nothing: it answers as ComfyUI does for a name that is taken, renamed.
 func (s *Server) upload(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	refuse := s.refuseUpload
+	s.refuseUpload = 0
+	s.mu.Unlock()
+	if refuse != 0 {
+		// Read up to the file's first bytes, then answer at once and close the connection, so
+		// net/http doesn't wait to drain the rest.
+		var read []byte
+		chunk := make([]byte, 64)
+		for {
+			if end := bytes.Index(read, []byte("\r\n\r\n")); end >= 0 && len(read) > end+4 {
+				break
+			}
+			n, err := r.Body.Read(chunk)
+			read = append(read, chunk[:n]...)
+			if err != nil {
+				break
+			}
+		}
+		w.Header().Set("Connection", "close")
+		writeJSON(w, refuse, []byte(`{"error":"refused"}`))
+		_ = http.NewResponseController(w).Flush()
+		if conn, _, err := http.NewResponseController(w).Hijack(); err == nil {
+			_ = conn.Close()
+		}
+		return
+	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return

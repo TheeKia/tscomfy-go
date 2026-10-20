@@ -2,12 +2,14 @@ package comfy_test
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/TheeKia/tscomfy-go/comfy"
 	"github.com/TheeKia/tscomfy-go/internal/comfytest"
@@ -52,6 +54,43 @@ func TestUploadRefusesBadInput(t *testing.T) {
 		if _, err := c.Upload(t.Context(), "a.png", broken, nil); err == nil || !strings.Contains(err.Error(), "broken reader") {
 			t.Errorf("an upload whose reader fails = %v", err)
 		}
+	})
+}
+
+// stalled reads its data, then blocks until released: a client uploading through the backend
+// that stopped sending.
+type stalled struct {
+	data    []byte
+	release chan struct{}
+}
+
+func (r *stalled) Read(p []byte) (int, error) {
+	if len(r.data) > 0 {
+		n := copy(p, r.data)
+		r.data = r.data[n:]
+		return n, nil
+	}
+	<-r.release
+	return 0, io.EOF
+}
+
+func TestUploadReturnsWhenTheServerAnswersFirst(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv, c := fake(t)
+		srv.RefuseUploads(http.StatusRequestEntityTooLarge)
+		r := &stalled{data: []byte("\x89PNG"), release: make(chan struct{})}
+		ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+		defer cancel()
+		start := time.Now()
+		_, err := c.Upload(ctx, "big.png", r, nil)
+		if d := time.Since(start); d != 0 {
+			t.Errorf("Upload returned after %v, want at once", d)
+		}
+		if httpErr, ok := errors.AsType[*comfy.HTTPError](err); !ok || httpErr.StatusCode != http.StatusRequestEntityTooLarge {
+			t.Errorf("Upload = %v, want the server's 413 while the reader is stalled", err)
+		}
+		// The goroutine left in Read ends once the Read returns; synctest fails if it doesn't.
+		close(r.release)
 	})
 }
 

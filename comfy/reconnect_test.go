@@ -237,6 +237,21 @@ func TestFailedRecordReadsLeaveTheJobToItsNextPoll(t *testing.T) {
 	})
 }
 
+func TestARecordCutOffMidBodyLeavesTheJobToItsNextPoll(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv, c := fake(t)
+		r := run(t, "success", 0)
+		srv.Expect(r, comfytest.Behavior{})
+		srv.BreakRecordReads(1, http.StatusOK)
+		if _, err := submit(t, c, r, nil).Wait(t.Context()); err != nil {
+			t.Fatalf("Wait = %v, want the job settled by a later poll", err)
+		}
+		if n := len(requests(srv, http.MethodGet, "/api/jobs/")); n != 2 {
+			t.Errorf("%d record reads, want the cut one and 1 good", n)
+		}
+	})
+}
+
 func TestBusyRecordAnswersLeaveTheJobToItsNextPoll(t *testing.T) {
 	for _, status := range []int{http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusTooManyRequests} {
 		synctest.Test(t, func(t *testing.T) {

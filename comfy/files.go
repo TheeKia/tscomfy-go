@@ -71,16 +71,18 @@ func (c *Client) Upload(ctx context.Context, name string, r io.Reader, opts *Upl
 	resp, err := c.do(ctx, http.MethodPost, "upload/image", nil, body, form.FormDataContentType())
 	// The request is over: the writer ends at its next write, or once a pending Read of r returns.
 	_ = body.CloseWithError(errUploadEnded)
-	var formErr error
-	select {
-	case formErr = <-written:
-	case <-ctx.Done():
-	}
 	if err != nil {
 		return UploadedFile{}, c.closedOr(err)
 	}
 	if resp.StatusCode != http.StatusOK {
+		// The server may have answered before reading the whole file: don't wait for r.
 		return UploadedFile{}, unexpected(resp, op)
+	}
+	// A 200 means the server read the whole form, so the writer is done.
+	var formErr error
+	select {
+	case formErr = <-written:
+	case <-ctx.Done():
 	}
 	if formErr != nil && !errors.Is(formErr, errUploadEnded) {
 		drain(resp)
