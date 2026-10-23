@@ -17,10 +17,12 @@ needs them.
 
 ## The client in a service
 
-- `Dial` once at start-up, `Close` at shutdown. `Close` stops the client's goroutines and requests;
-  jobs still running on the server keep running.
-- A backend that starts before ComfyUI retries `Dial`. After that, the client survives ComfyUI
-  restarts: a dropped socket reconnects while jobs are open (about two minutes of attempts), and
+- One client for the backend's lifetime: `Dial` (or `New`) at start-up, `Close` at shutdown.
+  `Close` stops the client's goroutines and requests; jobs still running on the server keep
+  running.
+- A backend that may start before ComfyUI makes its client with `New`, which contacts nothing:
+  the first `Submit` checks the server and connects. `Ping` reads `/system_stats` without a
+  socket, for a health check or a status page. The client survives ComfyUI restarts: a dropped socket reconnects while jobs are open (about two minutes of attempts), and
   the next `Submit` reopens it otherwise. A job whose record a restart wiped ends with
   `comfy.ErrJobLost`.
 - The client pings the socket while jobs are open, so a connection a proxy dropped silently is

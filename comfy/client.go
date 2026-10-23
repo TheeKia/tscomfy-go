@@ -80,6 +80,9 @@ type Client struct {
 	// queue is signaled by status messages, for the list read of jobs that haven't started.
 	queue chan struct{}
 
+	// checked is set once the server's version passed: by Dial, Ping or a first Submit.
+	checked atomic.Bool
+
 	mu        sync.Mutex
 	closed    bool
 	sock      *socket
@@ -110,11 +113,11 @@ type flight struct {
 	err  error // set before done closes
 }
 
-// Dial connects to the ComfyUI server at rawURL, its http(s) base URL. A path prefix and a query
-// are kept on every request. Dial opens the websocket, exchanges feature flags, and checks the
-// server's version: a server that isn't ComfyUI 0.42 or later is ErrUnsupportedServer. ctx bounds
-// Dial only. On an error nothing stays open.
-func Dial(ctx context.Context, rawURL string, opts *Options) (*Client, error) {
+// New makes a client of the ComfyUI server at rawURL, its http(s) base URL, without contacting
+// the server. A path prefix and a query are kept on every request. The first Submit checks the
+// server's version and opens the websocket, as Dial does, so a backend can start before ComfyUI;
+// Ping reports whether the server is reachable meanwhile. New fails only for an invalid URL.
+func New(rawURL string, opts *Options) (*Client, error) {
 	base, err := parseBaseURL(rawURL)
 	if err != nil {
 		return nil, err
@@ -141,11 +144,23 @@ func Dial(ctx context.Context, rawURL string, opts *Options) (*Client, error) {
 		c.log = slog.New(slog.DiscardHandler)
 	}
 	c.life, c.stop = context.WithCancel(context.Background())
+	c.wg.Go(c.watchQueue)
+	return c, nil
+}
+
+// Dial connects to the ComfyUI server at rawURL, as New does, and contacts it at once: it opens
+// the websocket, exchanges feature flags, and checks the server's version. A server that isn't
+// ComfyUI 0.42 or later is ErrUnsupportedServer. ctx bounds Dial only. On an error nothing stays
+// open.
+func Dial(ctx context.Context, rawURL string, opts *Options) (*Client, error) {
+	c, err := New(rawURL, opts)
+	if err != nil {
+		return nil, err
+	}
 	if err := c.dial(ctx); err != nil {
 		_ = c.Close()
 		return nil, err
 	}
-	c.wg.Go(c.watchQueue)
 	return c, nil
 }
 
@@ -160,7 +175,8 @@ func (c *Client) dial(ctx context.Context) error {
 	return c.checkVersion(ctx)
 }
 
-// checkVersion reads /system_stats: ComfyUI 0.42 or later.
+// checkVersion reads /system_stats: ComfyUI 0.42 or later. A pass is remembered, so the first
+// socket of a client made with New is opened after one.
 func (c *Client) checkVersion(ctx context.Context) error {
 	const op = "GET /system_stats"
 	resp, err := c.do(ctx, http.MethodGet, "system_stats", nil, nil, "")
@@ -186,7 +202,20 @@ func (c *Client) checkVersion(ctx context.Context) error {
 		return fmt.Errorf("%w: it runs ComfyUI %s; the client needs %d.%d.%d or later", ErrUnsupportedServer,
 			stats.System.Version, minVersion[0], minVersion[1], minVersion[2])
 	}
+	c.checked.Store(true)
 	return nil
+}
+
+// Ping checks the server as Dial does, without the websocket: that it answers /system_stats and
+// runs ComfyUI 0.42 or later, else ErrUnsupportedServer. It opens nothing, so a backend can call
+// it to report the server's health. ctx bounds it.
+func (c *Client) Ping(ctx context.Context) error {
+	ctx, cancel, err := c.callContext(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+	return c.closedOr(c.checkVersion(ctx))
 }
 
 var versionPattern = regexp.MustCompile(`^v?(\d+)\.(\d+)\.(\d+)`)
@@ -553,11 +582,18 @@ func (c *Client) checkIdle(s *socket, f *flight) {
 	close(f.done)
 }
 
-// openForSubmit opens a socket for the callers of ready, flags first.
+// openForSubmit opens a socket for the callers of ready, flags first, after checking the
+// server's version unless that passed already.
 func (c *Client) openForSubmit(f *flight) {
-	s, err := c.open(c.life)
-	if err == nil && !c.install(s) {
-		err = ErrClosed
+	var s *socket
+	var err error
+	if !c.checked.Load() {
+		err = c.closedOr(c.checkVersion(c.life))
+	}
+	if err == nil {
+		if s, err = c.open(c.life); err == nil && !c.install(s) {
+			err = ErrClosed
+		}
 	}
 	c.mu.Lock()
 	if c.opening == f {

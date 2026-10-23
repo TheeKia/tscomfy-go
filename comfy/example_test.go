@@ -29,6 +29,22 @@ func ExampleDial() {
 	fmt.Println(c.FileURL(comfy.FileRef{Filename: "a.png", Type: comfy.FolderOutput}))
 }
 
+// A backend that may start before ComfyUI makes its client with New: the first Submit connects,
+// and Ping reports the server's health meanwhile.
+func ExampleNew() {
+	c, err := comfy.New("http://127.0.0.1:8188", nil)
+	if err != nil {
+		fmt.Println(err) // only an invalid URL
+		return
+	}
+	defer c.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := c.Ping(ctx); err != nil {
+		fmt.Println("ComfyUI is unavailable:", err)
+	}
+}
+
 // Run suits a synchronous handler: its context governs the job.
 func ExampleClient_Run() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)

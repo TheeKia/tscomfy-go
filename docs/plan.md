@@ -214,3 +214,6 @@ tscomfy is not changed from this repository.
   result keeps one output per node the server ran), `Upload` blocking after an early answer,
   cut-off record reads ending jobs, unhelpful generator errors for stray stdout and byte-order
   marks, and `TemplateError` missing from `@tscomfy/go`'s exports. Version 0.2.0.
+- **2026-10-24:** for a backend that starts before ComfyUI and shows the server's health between
+  jobs (the owner's questionable-tools), `comfy.New` makes a client without contacting the
+  server, and `Client.Ping` checks `/system_stats` without a socket (spec §7.2). In 0.2.0.

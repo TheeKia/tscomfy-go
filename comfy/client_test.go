@@ -142,6 +142,124 @@ func TestDialChecksTheServer(t *testing.T) {
 	}
 }
 
+func TestNewConnectsOnFirstSubmit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv := comfytest.New(comfytest.Options{})
+		defer srv.Close()
+		c, err := comfy.New(srv.URL(), &comfy.Options{HTTPClient: srv.Client()})
+		if err != nil {
+			t.Fatalf("New: %v", err)
+		}
+		defer func() { _ = c.Close() }()
+		synctest.Wait()
+		if got := srv.Received(); len(got) != 0 {
+			t.Fatalf("New sent %d requests, want none", len(got))
+		}
+		r := run(t, "success", 0)
+		srv.Expect(r, comfytest.Behavior{})
+		job, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil)
+		if err != nil {
+			t.Fatalf("Submit: %v", err)
+		}
+		if _, err := job.Wait(t.Context()); err != nil {
+			t.Fatalf("Wait: %v", err)
+		}
+		var paths []string
+		for _, req := range srv.Received() {
+			paths = append(paths, req.Method+" "+req.Path)
+		}
+		if len(paths) < 3 || paths[0] != "GET /system_stats" || paths[1] != "GET /ws" || paths[2] != "POST /prompt" {
+			t.Errorf("requests = %v, want the version check, the websocket, then the prompt", paths)
+		}
+	})
+}
+
+func TestNewChecksTheServerOnSubmit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv := comfytest.New(comfytest.Options{Version: "0.41.3"})
+		defer srv.Close()
+		c, err := comfy.New(srv.URL(), &comfy.Options{HTTPClient: srv.Client()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = c.Close() }()
+		if _, err := c.Submit(t.Context(), comfy.Prompt(run(t, "success", 0).Prompt), nil); !errors.Is(err, comfy.ErrUnsupportedServer) {
+			t.Errorf("Submit = %v, want ErrUnsupportedServer", err)
+		}
+		synctest.Wait()
+		if n := len(srv.Sockets()); n != 0 {
+			t.Errorf("%d sockets were opened", n)
+		}
+	})
+}
+
+func TestNewBeforeTheServerIsUp(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv := comfytest.New(comfytest.Options{})
+		defer srv.Close()
+		srv.RefuseSockets(true)
+		c, err := comfy.New(srv.URL(), &comfy.Options{HTTPClient: srv.Client()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = c.Close() }()
+		r := run(t, "success", 0)
+		if _, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil); err == nil {
+			t.Fatal("Submit succeeded while the server refused sockets")
+		}
+		srv.RefuseSockets(false)
+		srv.Expect(r, comfytest.Behavior{})
+		job, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil)
+		if err != nil {
+			t.Fatalf("Submit once the server is up: %v", err)
+		}
+		if _, err := job.Wait(t.Context()); err != nil {
+			t.Errorf("Wait: %v", err)
+		}
+	})
+}
+
+func TestNewRefusesAnInvalidURL(t *testing.T) {
+	for _, raw := range []string{"ftp://comfy.test", "http://user:pass@comfy.test", "http://comfy.test/#x"} {
+		if c, err := comfy.New(raw, nil); err == nil || c != nil {
+			t.Errorf("New(%q) = %v, %v; want an error", raw, c, err)
+		}
+	}
+}
+
+func TestPing(t *testing.T) {
+	tests := []struct {
+		name string
+		opts comfytest.Options
+		want error
+	}{
+		{"a supported server", comfytest.Options{}, nil},
+		{"an old version", comfytest.Options{Version: "0.41.3"}, comfy.ErrUnsupportedServer},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				srv := comfytest.New(tt.opts)
+				defer srv.Close()
+				c, err := comfy.New(srv.URL(), &comfy.Options{HTTPClient: srv.Client()})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if err := c.Ping(t.Context()); !errors.Is(err, tt.want) {
+					t.Errorf("Ping = %v, want %v", err, tt.want)
+				}
+				if n := len(srv.Sockets()); n != 0 {
+					t.Errorf("Ping opened %d sockets", n)
+				}
+				_ = c.Close()
+				if err := c.Ping(t.Context()); !errors.Is(err, comfy.ErrClosed) {
+					t.Errorf("Ping after Close = %v, want ErrClosed", err)
+				}
+			})
+		})
+	}
+}
+
 func TestCloseEndsOpenJobs(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		srv, c := fake(t)

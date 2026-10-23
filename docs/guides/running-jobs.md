@@ -5,7 +5,9 @@ client, err := comfy.Dial(ctx, "http://127.0.0.1:8188", nil)
 ```
 
 One client per ComfyUI server, shared by every job; it is safe for concurrent use. `Dial`
-refuses a server older than ComfyUI 0.42 with `comfy.ErrUnsupportedServer`.
+refuses a server older than ComfyUI 0.42 with `comfy.ErrUnsupportedServer`. `comfy.New` makes the
+same client without contacting the server, for a backend that may start first: its first `Submit`
+does the check, and `client.Ping(ctx)` reports whether the server is up.
 
 ## Run, or Submit and Wait
 

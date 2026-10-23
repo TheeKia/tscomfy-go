@@ -546,6 +546,7 @@ The client's behavior is ported from tscomfy's `@tscomfy/client` (`packages/clie
 server. Its tests are the cases to port (§9). Its API shape is not: this section is.
 
 ```go
+func New(rawURL string, opts *Options) (*Client, error)
 func Dial(ctx context.Context, rawURL string, opts *Options) (*Client, error)
 
 type Options struct {
@@ -554,6 +555,7 @@ type Options struct {
 	Logger     *slog.Logger // default: discard
 }
 
+func (c *Client) Ping(ctx context.Context) error
 func (c *Client) Close() error
 ```
 
@@ -569,13 +571,20 @@ func (c *Client) Close() error
      `major.minor.patch`, or is below 0.42.0 is `ErrUnsupportedServer`.
 
   On failure nothing stays open.
+- **`New`** makes the same client without contacting the server; it fails only for an invalid
+  URL. The first `Submit` checks `/system_stats` as `Dial`'s step 3 does, unless a check passed
+  already, then opens the socket. A backend that may start before ComfyUI uses it instead of
+  retrying `Dial`.
+- **`Ping`** is `Dial`'s step 3 alone: `/system_stats` answers, with ComfyUI 0.42.0 or later. It
+  opens no socket, so a backend can call it at any time to report the server's health, with or
+  without open jobs.
 - **The client id** is internal. It changes with every socket, and a second socket opened with it
   would silence the client's own (both §8, rule 6). The client logs each socket's id at debug
   level.
 - **One client per ComfyUI server.** Any number of jobs share its socket, told apart by prompt id.
 - **A dropped socket** reconnects while jobs are open (§8, rule 6). With no job open it stays
   closed, and the next `Submit` reopens it, flags first. A backend therefore survives ComfyUI
-  restarts; one that starts before ComfyUI retries `Dial`.
+  restarts; one that starts before ComfyUI uses `New`.
 - **`Close`** stops everything the client started: sockets, goroutines, timers, polls, in-flight
   POSTs. Open jobs' `Wait` and `Run` return `ErrClosed`; the jobs keep running on the server.
   Later calls return `ErrClosed`. `Close` is idempotent.
