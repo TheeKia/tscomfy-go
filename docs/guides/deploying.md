@@ -22,9 +22,10 @@ needs them.
   running.
 - A backend that may start before ComfyUI makes its client with `New`, which contacts nothing:
   the first `Submit` checks the server and connects. `Ping` reads `/system_stats` without a
-  socket, for a health check or a status page. The client survives ComfyUI restarts: a dropped socket reconnects while jobs are open (about two minutes of attempts), and
-  the next `Submit` reopens it otherwise. A job whose record a restart wiped ends with
-  `comfy.ErrJobLost`.
+  socket, for a health check or a status page.
+- The client survives ComfyUI restarts: a dropped socket reconnects while jobs are open (about
+  two minutes of attempts), and the next `Submit` reopens it otherwise. A job whose record a
+  restart wiped ends with `comfy.ErrJobLost`.
 - The client pings the socket while jobs are open, so a connection a proxy dropped silently is
   found within about 40 seconds.
 - Behind a proxy that needs a token, put it in `Options.Header`, or in the URL's query, which the

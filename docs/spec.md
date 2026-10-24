@@ -572,8 +572,8 @@ func (c *Client) Close() error
 
   On failure nothing stays open.
 - **`New`** makes the same client without contacting the server; it fails only for an invalid
-  URL. The first `Submit` checks `/system_stats` as `Dial`'s step 3 does, unless a check passed
-  already, then opens the socket. A backend that may start before ComfyUI uses it instead of
+  URL. The first `Submit` checks `/system_stats` as `Dial`'s step 3 does, within 10 s, unless a
+  check passed already, then opens the socket. A backend that may start before ComfyUI uses it instead of
   retrying `Dial`.
 - **`Ping`** is `Dial`'s step 3 alone: `/system_stats` answers, with ComfyUI 0.42.0 or later. It
   opens no socket, so a backend can call it at any time to report the server's health, with or

@@ -83,6 +83,7 @@ type Server struct {
 	sockets  []string // each handshake's query
 	refuse   bool     // answer handshakes with 403
 	broken   int      // record reads still to break
+	hung     int      // /system_stats reads still to hang
 	breakAs  int      // how: 0 drops the connection, 200 cuts the body, else this status with a plain body
 	// refuseUpload is the status the next upload is answered with partway through its file; 0: none.
 	refuseUpload int
@@ -287,6 +288,14 @@ func (s *Server) BreakRecordReads(n, status int) {
 	s.broken, s.breakAs = n, status
 }
 
+// HangSystemStats makes the next n reads of /system_stats go unanswered until the client gives
+// up, as a server that accepts connections and never answers does.
+func (s *Server) HangSystemStats(n int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hung = n
+}
+
 // RefuseUploads answers the next upload with status partway through its file, once the first of
 // the file's bytes have arrived, and closes the connection, as ComfyUI does when a file passes its
 // size limit (413).
@@ -389,7 +398,20 @@ func (s *Server) broadcast(message []byte) {
 	}
 }
 
-func (s *Server) systemStats(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) systemStats(w http.ResponseWriter, r *http.Request) {
+	s.mu.Lock()
+	hang := s.hung > 0
+	if hang {
+		s.hung--
+	}
+	s.mu.Unlock()
+	if hang {
+		select {
+		case <-r.Context().Done():
+		case <-s.done:
+		}
+		return
+	}
 	body, _ := json.Marshal(map[string]any{"system": map[string]any{"comfyui_version": s.opts.Version}})
 	writeJSON(w, http.StatusOK, body)
 }

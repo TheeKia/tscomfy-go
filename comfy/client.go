@@ -21,8 +21,8 @@ import (
 
 // Timing and limits of the protocol (docs/spec.md §7, §8).
 const (
-	// handshakeTimeout bounds opening a socket: the websocket handshake and the server's answer
-	// to the feature flags.
+	// handshakeTimeout bounds each step of opening a socket: the websocket handshake, the
+	// server's answer to the feature flags, and the version check before a first socket.
 	handshakeTimeout = 10 * time.Second
 	// readLimit is the largest websocket message the client takes: previews are small, but
 	// SaveImageWebsocket sends a whole PNG (rule 12).
@@ -583,12 +583,14 @@ func (c *Client) checkIdle(s *socket, f *flight) {
 }
 
 // openForSubmit opens a socket for the callers of ready, flags first, after checking the
-// server's version unless that passed already.
+// server's version within handshakeTimeout unless that passed already.
 func (c *Client) openForSubmit(f *flight) {
 	var s *socket
 	var err error
 	if !c.checked.Load() {
-		err = c.closedOr(c.checkVersion(c.life))
+		ctx, cancel := context.WithTimeout(c.life, handshakeTimeout)
+		err = c.closedOr(c.checkVersion(ctx))
+		cancel()
 	}
 	if err == nil {
 		if s, err = c.open(c.life); err == nil && !c.install(s) {

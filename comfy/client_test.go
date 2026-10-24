@@ -1,6 +1,7 @@
 package comfy_test
 
 import (
+	"context"
 	"errors"
 	"slices"
 	"strings"
@@ -212,6 +213,31 @@ func TestNewBeforeTheServerIsUp(t *testing.T) {
 		job, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil)
 		if err != nil {
 			t.Fatalf("Submit once the server is up: %v", err)
+		}
+		if _, err := job.Wait(t.Context()); err != nil {
+			t.Errorf("Wait: %v", err)
+		}
+	})
+}
+
+func TestNewRetriesAHungCheck(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		srv := comfytest.New(comfytest.Options{})
+		defer srv.Close()
+		srv.HangSystemStats(1)
+		c, err := comfy.New(srv.URL(), &comfy.Options{HTTPClient: srv.Client()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = c.Close() }()
+		r := run(t, "success", 0)
+		if _, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil); !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("Submit = %v, want the version check to time out", err)
+		}
+		srv.Expect(r, comfytest.Behavior{})
+		job, err := c.Submit(t.Context(), comfy.Prompt(r.Prompt), nil)
+		if err != nil {
+			t.Fatalf("Submit once the server answers: %v", err)
 		}
 		if _, err := job.Wait(t.Context()); err != nil {
 			t.Errorf("Wait: %v", err)
